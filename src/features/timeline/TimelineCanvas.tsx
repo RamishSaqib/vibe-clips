@@ -201,7 +201,6 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
         onMouseDown={handleMouseDown}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        style={{ display: 'block', width: canvasWidth + 'px', height: TRACK_HEIGHT + 'px' }}
       />
     </div>
   );
