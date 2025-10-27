@@ -10,11 +10,20 @@ pub fn run() {
       
       // Listen for file-drop events from the OS
       app.handle().listen("tauri://file-drop", move |event| {
+        println!("Rust: File drop event received");
         let payload_str = event.payload() as &str;
+        println!("Rust: payload_str = {}", payload_str);
+        
         let payload: Vec<String> = serde_json::from_str(payload_str)
-            .unwrap_or_else(|_| vec![]);
+            .unwrap_or_else(|e| {
+                println!("Rust: Failed to parse payload: {:?}", e);
+                vec![]
+            });
+        
+        println!("Rust: Parsed {} file paths", payload.len());
         
         if !payload.is_empty() {
+            println!("Rust: Emitting file-drop event to frontend with {} files", payload.len());
             // Emit the file paths to the frontend
             let _ = app_handle.emit("file-drop", &payload);
         }

@@ -17,7 +17,11 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
         
         // Listen for file-drop event from Tauri backend
         await listen('file-drop', (event) => {
+          console.log('Frontend: Received file-drop event');
+          console.log('Frontend: event.payload =', event.payload);
+          
           const filePaths = event.payload as string[];
+          console.log('Frontend: filePaths =', filePaths);
           
           if (filePaths && filePaths.length > 0) {
             // Convert file paths to File objects
