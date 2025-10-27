@@ -63,9 +63,10 @@
   grid-row: 1;
 }
 
-.timeline-section {
+.timeline-section-wrapper {
   grid-column: 2;
   grid-row: 2;
+  overflow: hidden;
 }
 
 .preview-section {

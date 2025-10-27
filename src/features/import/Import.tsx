@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { VideoFile } from '../../types/video';
 import { ImportZone } from './ImportZone';
 import { MediaLibrary } from './MediaLibrary';
+import { useVideos } from '../../contexts/VideoContext';
 
 export function Import() {
-  const [videos, setVideos] = useState<VideoFile[]>([]);
+  const { videos, addVideo } = useVideos();
 
   const handleFilesSelected = useCallback((files: FileList) => {
     console.log('handleFilesSelected called with', files.length, 'files');
@@ -30,7 +31,7 @@ export function Import() {
               height: video.videoHeight,
             },
           };
-          setVideos(prev => [...prev, newVideo]);
+          addVideo(newVideo);
         });
 
         video.addEventListener('error', () => {
@@ -39,7 +40,7 @@ export function Import() {
       };
       reader.readAsDataURL(file);
     });
-  }, []);
+  }, [addVideo]);
 
   return (
     <div className="import-section">
