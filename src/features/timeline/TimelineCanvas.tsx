@@ -127,17 +127,21 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
   // Handle mouse interactions
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     e.preventDefault();
     
-    // Get scroll position and mouse position relative to the container
-    const scrollX = containerRef.current?.scrollLeft || 0;
+    // Get the mouse position relative to the viewport
     const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
     
-    // Calculate the actual position in canvas coordinates (accounting for scroll)
-    const clickX = (e.clientX - rect.left) + scrollX;
-    const newTime = clickX / (PIXELS_PER_SECOND * state.zoom);
+    // Add the scroll offset to get the actual position in the scrollable content
+    const scrollX = container.scrollLeft;
+    const actualX = mouseX + scrollX;
+    
+    // Convert to time
+    const newTime = actualX / (PIXELS_PER_SECOND * state.zoom);
     
     // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
@@ -147,15 +151,18 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     
     // Add global listeners for drag
     const handleMove = (moveEvent: MouseEvent) => {
-      if (!canvas || !isDraggingRef.current) return;
+      if (!canvas || !container || !isDraggingRef.current) return;
       
-      // Get scroll position and mouse position relative to the container
-      const scrollX = containerRef.current?.scrollLeft || 0;
+      // Get the mouse position relative to the viewport
       const rect = canvas.getBoundingClientRect();
+      const mouseX = moveEvent.clientX - rect.left;
       
-      // Calculate the actual position in canvas coordinates (accounting for scroll)
-      const mouseX = (moveEvent.clientX - rect.left) + scrollX;
-      const newTime = mouseX / (PIXELS_PER_SECOND * state.zoom);
+      // Add the scroll offset to get the actual position in the scrollable content
+      const scrollX = container.scrollLeft;
+      const actualX = mouseX + scrollX;
+      
+      // Convert to time
+      const newTime = actualX / (PIXELS_PER_SECOND * state.zoom);
       
       // Always update during drag to follow cursor
       onPlayheadDrag(Math.max(0, newTime));
