@@ -31,7 +31,8 @@
   gap: 1rem;
   padding: 1rem;
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
+  min-height: 600px;
 }
 
 .placeholder-section {
@@ -67,6 +68,9 @@
   grid-column: 2;
   grid-row: 2;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .preview-section {
