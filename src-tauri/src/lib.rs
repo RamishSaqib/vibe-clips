@@ -1,7 +1,6 @@
 use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
-use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
@@ -22,51 +21,79 @@ async fn export_video(
 
     println!("Exporting {} clips to {}", clips.len(), output_path);
     
-    // Create a temporary concat file for FFmpeg
-    let concat_file = format!("{}.concat.txt", output_path);
-    let mut concat_content = String::new();
-    
     // Sort clips by start_time to maintain order
     let mut sorted_clips = clips.clone();
     sorted_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
     
-    for clip in &sorted_clips {
-        // Format: file '/path/to/file'
-        // inpoint and outpoint are the trim boundaries
-        concat_content.push_str(&format!(
-            "file '{}'\ninpoint {:.6}\noutpoint {:.6}\n",
-            clip.file_path.replace("\\", "/"),
-            clip.trim_start,
-            clip.trim_start + clip.duration
+    // Build filter_complex for trimming and concatenating
+    let mut inputs = Vec::new();
+    let mut filter_parts = Vec::new();
+    let mut inputs_str = String::new();
+    
+    for (i, clip) in sorted_clips.iter().enumerate() {
+        let path = clip.file_path.replace("\\", "/");
+        
+        // Add input
+        inputs.push("-i".to_string());
+        inputs.push(path.clone());
+        
+        // Trim each clip: [i:v]trim=start={trim_start}:duration={duration},setpts=PTS-STARTPTS[v{i}]
+        //                 [i:a]atrim=start={trim_start}:duration={duration},asetpts=PTS-STARTPTS[a{i}]
+        let trim_start = clip.trim_start;
+        let trim_end = clip.trim_start + clip.duration;
+        filter_parts.push(format!(
+            "[{}:v]trim=start={:.6}:end={:.6},setpts=PTS-STARTPTS[v{}];[{}:a]atrim=start={:.6}:end={:.6},asetpts=PTS-STARTPTS[a{}]",
+            i, trim_start, trim_end, i, i, trim_start, trim_end, i
         ));
+        
+        // Add to concat inputs
+        inputs_str.push_str(&format!("[v{}][a{}]", i, i));
+        if i < sorted_clips.len() - 1 {
+            inputs_str.push_str(":");
+        }
     }
     
-    // Write concat file
-    fs::write(&concat_file, concat_content)
-        .map_err(|e| format!("Failed to write concat file: {}", e))?;
+    // Final concat filter
+    filter_parts.push(format!("{}concat=n={}:v=1:a=1[outv][outa]", inputs_str, sorted_clips.len()));
+    
+    let filter_complex = filter_parts.join(";");
+    
+    println!("Filter complex: {}", filter_complex);
     
     // Build FFmpeg command
-    let ffmpeg_cmd = Command::new("ffmpeg")
-        .arg("-f")
-        .arg("concat")
-        .arg("-safe")
-        .arg("0")
-        .arg("-i")
-        .arg(&concat_file)
-        .arg("-c")
-        .arg("copy")
-        .arg("-y")
-        .arg(&output_path)
-        .output()
-        .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
+    let mut cmd = Command::new("ffmpeg");
     
-    // Clean up concat file
-    let _ = fs::remove_file(&concat_file);
+    // Add inputs
+    for arg in inputs {
+        cmd.arg(&arg);
+    }
+    
+    // Add filter
+    cmd.arg("-filter_complex").arg(&filter_complex);
+    
+    // Map outputs
+    cmd.arg("-map").arg("[outv]");
+    cmd.arg("-map").arg("[outa]");
+    
+    // Codec options
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("medium");
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    
+    // Overwrite output
+    cmd.arg("-y");
+    cmd.arg(&output_path);
+    
+    println!("Running FFmpeg...");
+    let ffmpeg_cmd = cmd.output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
     
     if ffmpeg_cmd.status.success() {
         Ok(format!("Video exported successfully to {}", output_path))
     } else {
         let error = String::from_utf8_lossy(&ffmpeg_cmd.stderr);
+        println!("FFmpeg stderr: {}", error);
         Err(format!("FFmpeg export failed: {}", error))
     }
 }
