@@ -1,3 +1,4 @@
+import { Import } from './features/import';
 import './App.css'
 
 function App() {
@@ -10,8 +11,7 @@ function App() {
 
       <main className="app-main">
         <div className="placeholder-section import-section">
-          <h2>Import</h2>
-          <p>Drag & drop videos here or use file picker</p>
+          <Import />
         </div>
 
         <div className="placeholder-section timeline-section">
@@ -34,4 +34,3 @@ function App() {
 }
 
 export default App
-

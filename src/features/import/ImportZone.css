@@ -1,0 +1,53 @@
+.import-zone {
+  border: 2px dashed #555;
+  border-radius: 8px;
+  padding: 3rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #222;
+}
+
+.import-zone:hover {
+  border-color: #777;
+  background: #252525;
+}
+
+.import-zone.dragging {
+  border-color: #4a9eff;
+  background: #1a3a5e;
+}
+
+.import-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-icon {
+  width: 48px;
+  height: 48px;
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+
+.import-zone h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #ddd;
+}
+
+.import-zone p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.file-types {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #666;
+}
+
