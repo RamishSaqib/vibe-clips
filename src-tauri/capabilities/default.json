@@ -8,7 +8,6 @@
   "permissions": [
     "core:default",
     "core:window:allow-close",
-    "core:window:allow-drag-window",
     "core:window:allow-request-user-attention",
     "fs:allow-read-file",
     "fs:allow-write-file",
