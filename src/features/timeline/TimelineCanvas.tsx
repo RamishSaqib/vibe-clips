@@ -45,15 +45,15 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     ctx.fillStyle = '#252525';
     ctx.fillRect(0, 0, width, TRACK_HEIGHT);
 
-    // Draw time ruler
+    // Draw time ruler (on bottom layer)
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     
     const timeInterval = getTimeInterval(state.zoom);
-    const startTime = Math.floor(state.scrollOffset / (PIXELS_PER_SECOND * state.zoom));
+    const startTime = 0;
     
-    for (let time = startTime; time <= startTime + (width / (PIXELS_PER_SECOND * state.zoom)); time += timeInterval) {
-      const x = (time - state.scrollOffset / (PIXELS_PER_SECOND * state.zoom)) * PIXELS_PER_SECOND * state.zoom;
+    for (let time = startTime; time <= maxDuration; time += timeInterval) {
+      const x = time * PIXELS_PER_SECOND * state.zoom;
       
       // Draw tick mark
       ctx.beginPath();
@@ -68,7 +68,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       ctx.fillStyle = '#555';
     }
 
-    // Draw clips
+    // Draw clips (on top of time markers)
     state.clips.forEach(clip => {
       const video = videos.find(v => v.id === clip.videoFileId);
       if (!video) return;
@@ -131,9 +131,14 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     e.preventDefault();
     
-    const rect = canvas.getBoundingClientRect();
-    const scrollX = containerRef.current?.scrollLeft || 0;
-    const clickX = e.clientX - rect.left + scrollX; // Mouse position + scroll = absolute position
+    // Get the actual scroll position and mouse position relative to canvas
+    const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels
+    const visibleCanvasWidth = canvas.getBoundingClientRect().width;
+    const canvasActualWidth = canvas.width; // Canvas pixels
+    const scale = canvasActualWidth / visibleCanvasWidth; // Scale factor
+    
+    // Calculate the actual pixel position on the canvas accounting for scroll
+    const clickX = (e.clientX - canvas.getBoundingClientRect().left) * scale + scrollX * scale;
     const newTime = clickX / (PIXELS_PER_SECOND * state.zoom);
     
     // Update playhead immediately
@@ -146,9 +151,15 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const handleMove = (moveEvent: MouseEvent) => {
       if (!canvas || !isDraggingRef.current) return;
       
+      // Get the actual scroll position and mouse position relative to canvas  
+      const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels
       const rect = canvas.getBoundingClientRect();
-      const scrollX = containerRef.current?.scrollLeft || 0;
-      const mouseX = moveEvent.clientX - rect.left + scrollX; // Mouse position + scroll = absolute position
+      const visibleCanvasWidth = rect.width;
+      const canvasActualWidth = canvas.width; // Canvas pixels
+      const scale = canvasActualWidth / visibleCanvasWidth; // Scale factor
+      
+      // Calculate the actual pixel position on the canvas accounting for scroll
+      const mouseX = (moveEvent.clientX - rect.left) * scale + scrollX * scale;
       const newTime = mouseX / (PIXELS_PER_SECOND * state.zoom);
       
       // Always update during drag to follow cursor
