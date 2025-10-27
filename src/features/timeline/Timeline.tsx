@@ -10,28 +10,36 @@ export function Timeline() {
   const { timelineState, setTimelineState } = useTimeline();
 
   const handlePlayheadDrag = useCallback((position: number) => {
-    setTimelineState(prev => ({ ...prev, playheadPosition: position }));
-  }, []);
+    setTimelineState(prev => {
+      // Only update if value actually changed (threshold of 0.001 seconds)
+      if (Math.abs(prev.playheadPosition - position) < 0.001) {
+        return prev;
+      }
+      return { ...prev, playheadPosition: position };
+    });
+  }, [setTimelineState]);
 
   const handleVideoDropped = useCallback((videoId: string) => {
     const video = videos.find(v => v.id === videoId);
     if (!video) return;
 
-    const newClip: TimelineClip = {
-      id: `clip-${Date.now()}`,
-      videoFileId: video.id,
-      startTime: timelineState.playheadPosition,
-      duration: video.duration,
-      trimStart: 0,
-      trimEnd: video.duration,
-      track: 0,
-    };
-    
-    setTimelineState(prev => ({
-      ...prev,
-      clips: [...prev.clips, newClip],
-    }));
-  }, [videos, timelineState.playheadPosition]);
+    setTimelineState(prev => {
+      const newClip: TimelineClip = {
+        id: `clip-${Date.now()}`,
+        videoFileId: video.id,
+        startTime: prev.playheadPosition,
+        duration: video.duration,
+        trimStart: 0,
+        trimEnd: video.duration,
+        track: 0,
+      };
+      
+      return {
+        ...prev,
+        clips: [...prev.clips, newClip],
+      };
+    });
+  }, [videos, setTimelineState]);
 
 
   return (
