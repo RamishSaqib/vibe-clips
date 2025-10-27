@@ -11,25 +11,33 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
 
   // Handle Tauri's global file drop event
   useEffect(() => {
-    const handleGlobalDrop = async () => {
-      // Tauri may handle drag and drop at the window level
-      // This would need to be implemented in the Rust backend
-      console.log('Global drop handler would be called here if implemented in Tauri backend');
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('tauri://file-drop', (event: any) => {
+        console.log('Tauri file drop event:', event);
+        // The payload will contain the file paths
+        // We'd need to create File objects from these paths
+        // For now, just log it
+      });
+    }).catch(() => {
+      // Not in Tauri environment
+    });
+
+    // Listen for drag events on the whole window to ensure they work
+    const handleDragover = (e: DragEvent) => {
+      e.preventDefault();
     };
 
-    // Listen for drag events on the whole window
-    window.addEventListener('dragover', (e) => {
-      e.preventDefault();
-    });
-
-    window.addEventListener('drop', (e) => {
+    const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       console.log('Window level drop event');
-    });
+    };
+
+    window.addEventListener('dragover', handleDragover);
+    window.addEventListener('drop', handleDrop);
 
     return () => {
-      window.removeEventListener('dragover', () => {});
-      window.removeEventListener('drop', () => {});
+      window.removeEventListener('dragover', handleDragover);
+      window.removeEventListener('drop', handleDrop);
     };
   }, []);
 
