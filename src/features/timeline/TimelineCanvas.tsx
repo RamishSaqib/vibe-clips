@@ -129,12 +129,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     e.preventDefault();
     
     const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    const scaleX = canvas.width / rect.width; // Canvas pixels per CSS pixel
+    const clickX = (e.clientX - rect.left) * scaleX;
     const scrollX = containerRef.current?.scrollLeft || 0;
     const totalX = clickX + scrollX;
     const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
-    console.log('Click at:', clickX, 'TotalX:', totalX, 'Time:', newTime);
+    console.log('Click at:', e.clientX - rect.left, 'Scaled:', clickX, 'TotalX:', totalX, 'Time:', newTime);
     
     // Start dragging
     setIsDraggingPlayhead(true);
@@ -147,7 +148,8 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       if (!canvas || !isDraggingPlayhead) return;
       
       const rect = canvas.getBoundingClientRect();
-      const mouseX = moveEvent.clientX - rect.left;
+      const scaleX = canvas.width / rect.width;
+      const mouseX = (moveEvent.clientX - rect.left) * scaleX;
       const scrollX = containerRef.current?.scrollLeft || 0;
       const totalX = mouseX + scrollX;
       const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
