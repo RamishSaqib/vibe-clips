@@ -11,10 +11,6 @@ export function Timeline() {
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => {
-      // Only update if value actually changed (threshold of 0.001 seconds)
-      if (Math.abs(prev.playheadPosition - position) < 0.001) {
-        return prev;
-      }
       return { ...prev, playheadPosition: position };
     });
   }, [setTimelineState]);

@@ -155,11 +155,8 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const totalX = mouseX + scrollX;
       const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
       
-      // Only update if time changed significantly
-      const currentTime = state.playheadPosition;
-      if (Math.abs(newTime - currentTime) > 0.01) {
-        onPlayheadDrag(Math.max(0, newTime));
-      }
+      // Always update during drag to follow cursor
+      onPlayheadDrag(Math.max(0, newTime));
     };
     
     const handleUp = () => {
