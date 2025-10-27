@@ -10,7 +10,7 @@ interface TimelineCanvasProps {
   onVideoDropped: (videoId: string) => void;
 }
 
-const PIXELS_PER_SECOND = 100;
+const PIXELS_PER_SECOND = 30; // Reduced from 100 to show more content without scrolling
 const TRACK_HEIGHT = 60;
 
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
@@ -132,10 +132,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     e.preventDefault();
     
     const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left; // CSS pixels
-    const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels
-    const totalX = clickX + scrollX; // Total CSS pixels
-    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom); // Convert to seconds
+    const scrollX = containerRef.current?.scrollLeft || 0;
+    const clickX = e.clientX - rect.left + scrollX; // Mouse position + scroll = absolute position
+    const newTime = clickX / (PIXELS_PER_SECOND * state.zoom);
     
     // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
@@ -148,10 +147,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       if (!canvas || !isDraggingRef.current) return;
       
       const rect = canvas.getBoundingClientRect();
-      const mouseX = moveEvent.clientX - rect.left; // CSS pixels
-      const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels  
-      const totalX = mouseX + scrollX; // Total CSS pixels
-      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom); // Convert to seconds
+      const scrollX = containerRef.current?.scrollLeft || 0;
+      const mouseX = moveEvent.clientX - rect.left + scrollX; // Mouse position + scroll = absolute position
+      const newTime = mouseX / (PIXELS_PER_SECOND * state.zoom);
       
       // Always update during drag to follow cursor
       onPlayheadDrag(Math.max(0, newTime));
@@ -185,7 +183,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
   };
 
   const maxDuration = Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
-  const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 800);
+  const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 1200);
 
   return (
     <div ref={containerRef} style={{ overflowX: 'auto', width: '100%' }}>
