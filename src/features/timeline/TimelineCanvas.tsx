@@ -26,6 +26,11 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Calculate canvas width based on content
+    const maxDuration = Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
+    const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 800);
+    canvas.width = canvasWidth;
+    
     const width = canvas.width;
     const height = canvas.height;
 
@@ -68,7 +73,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const video = videos.find(v => v.id === clip.videoFileId);
       if (!video) return;
 
-      const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom - state.scrollOffset;
+      const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom;
       const clipWidth = clip.duration * PIXELS_PER_SECOND * state.zoom;
 
       // Clip background
@@ -96,7 +101,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     });
 
     // Draw playhead
-    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom - state.scrollOffset;
+    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
     ctx.strokeStyle = '#ff4a4a';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -174,7 +179,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     <div ref={containerRef} style={{ overflowX: 'auto' }}>
       <canvas
         ref={canvasRef}
-        width={800}
+        width={Math.max(...state.clips.map(c => c.startTime + c.duration), 10) * PIXELS_PER_SECOND * state.zoom || 800}
         height={TRACK_HEIGHT}
         className="timeline-canvas"
         onMouseDown={handleMouseDown}
