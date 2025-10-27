@@ -4,6 +4,7 @@
   height: 100vh;
   background: #1a1a1a;
   color: #e0e0e0;
+  overflow: hidden;
 }
 
 .app-header {
@@ -31,9 +32,8 @@
   gap: 1rem;
   padding: 1rem;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
   min-height: 600px;
+  height: calc(100vh - 120px);
 }
 
 .placeholder-section {
