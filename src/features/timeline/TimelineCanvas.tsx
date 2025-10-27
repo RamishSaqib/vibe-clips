@@ -103,17 +103,22 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Draw playhead
     const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
     ctx.strokeStyle = '#ff4a4a';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(playheadX, 0);
     ctx.lineTo(playheadX, TRACK_HEIGHT);
     ctx.stroke();
 
-    // Draw playhead handle
+    // Draw playhead handle (red circle)
     ctx.fillStyle = '#ff4a4a';
     ctx.beginPath();
-    ctx.arc(playheadX, TRACK_HEIGHT - 5, 5, 0, Math.PI * 2);
+    ctx.arc(playheadX, TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Draw handle border for visibility
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }, [state, videos]);
 
   // Handle mouse interactions
@@ -175,16 +180,20 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     }
   };
 
+  const maxDuration = Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
+  const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 800);
+
   return (
-    <div ref={containerRef} style={{ overflowX: 'auto' }}>
+    <div ref={containerRef} style={{ overflowX: 'auto', width: '100%' }}>
       <canvas
         ref={canvasRef}
-        width={Math.max(...state.clips.map(c => c.startTime + c.duration), 10) * PIXELS_PER_SECOND * state.zoom || 800}
+        width={canvasWidth}
         height={TRACK_HEIGHT}
         className="timeline-canvas"
         onMouseDown={handleMouseDown}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        style={{ display: 'block' }}
       />
     </div>
   );
