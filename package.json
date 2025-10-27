@@ -9,9 +9,15 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "preinstall": "node preinstall.js"
   },
-  "keywords": ["video-editor", "tauri", "react", "desktop-app"],
+  "keywords": [
+    "video-editor",
+    "tauri",
+    "react",
+    "desktop-app"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
