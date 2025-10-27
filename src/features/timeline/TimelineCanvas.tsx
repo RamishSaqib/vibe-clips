@@ -126,6 +126,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       setIsDraggingPlayhead(true);
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+    } else {
+      // Click anywhere on timeline to set playhead position
+      const newTime = (x + state.scrollOffset) / (PIXELS_PER_SECOND * state.zoom);
+      onPlayheadDrag(Math.max(0, newTime));
     }
   };
 
