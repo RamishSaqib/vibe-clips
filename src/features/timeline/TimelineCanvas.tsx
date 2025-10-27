@@ -100,25 +100,28 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       ctx.fillText(formatTime(clip.duration), clipX + 8, 40);
     });
 
-    // Draw playhead
-    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
-    ctx.strokeStyle = '#ff4a4a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, TRACK_HEIGHT);
-    ctx.stroke();
+    // Only draw playhead if there are clips on the timeline
+    if (state.clips.length > 0) {
+      // Draw playhead
+      const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
+      ctx.strokeStyle = '#ff4a4a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, 0);
+      ctx.lineTo(playheadX, TRACK_HEIGHT);
+      ctx.stroke();
 
-    // Draw playhead handle (red circle)
-    ctx.fillStyle = '#ff4a4a';
-    ctx.beginPath();
-    ctx.arc(playheadX, TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw handle border for visibility
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+      // Draw playhead handle (red circle)
+      ctx.fillStyle = '#ff4a4a';
+      ctx.beginPath();
+      ctx.arc(playheadX, TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw handle border for visibility
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }, [state, videos]);
 
   // Handle mouse interactions
@@ -152,7 +155,11 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const totalX = mouseX + scrollX;
       const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
       
-      onPlayheadDrag(Math.max(0, newTime));
+      // Only update if time changed significantly
+      const currentTime = state.playheadPosition;
+      if (Math.abs(newTime - currentTime) > 0.01) {
+        onPlayheadDrag(Math.max(0, newTime));
+      }
     };
     
     const handleUp = () => {
@@ -161,7 +168,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       document.removeEventListener('mouseup', handleUp);
     };
     
-    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
   };
 
