@@ -30,14 +30,19 @@ pub fn run() {
       });
       
       // Listen for file-drop-hover
-      app.handle().listen("tauri://file-drop-hover", move |_event| {
-        println!("File drag over window");
+      app.handle().listen("tauri://file-drop-hover", move |event| {
+        println!("Rust: File drag over window");
+        if let Ok(paths) = serde_json::from_value::<Vec<String>>(event.payload()) {
+          println!("Rust: Hover payload = {:?}", paths);
+        }
       });
       
       // Listen for file-drop-cancelled
       app.handle().listen("tauri://file-drop-cancelled", move |_event| {
-        println!("File drag cancelled");
+        println!("Rust: File drag cancelled");
       });
+      
+      println!("Rust: File-drop listeners registered successfully");
       
       Ok(())
     })
