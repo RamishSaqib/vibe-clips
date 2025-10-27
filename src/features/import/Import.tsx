@@ -7,7 +7,9 @@ export function Import() {
   const [videos, setVideos] = useState<VideoFile[]>([]);
 
   const handleFilesSelected = useCallback((files: FileList) => {
+    console.log('handleFilesSelected called with', files.length, 'files');
     Array.from(files).forEach(file => {
+      console.log('Processing file:', file.name, 'Type:', file.type);
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
