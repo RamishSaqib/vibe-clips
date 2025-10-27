@@ -15,6 +15,7 @@ const TRACK_HEIGHT = 60;
 
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
   // Draw the timeline
@@ -117,18 +118,19 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
+    const scrollX = containerRef.current?.scrollLeft || 0;
 
     // Check if clicking on playhead handle
-    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom - state.scrollOffset;
+    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
     const playheadRadius = 5;
     
-    if (Math.abs(x - playheadX) < playheadRadius + 3) {
+    if (Math.abs(x + scrollX - playheadX) < playheadRadius + 3) {
       setIsDraggingPlayhead(true);
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     } else {
       // Click anywhere on timeline to set playhead position
-      const newTime = (x + state.scrollOffset) / (PIXELS_PER_SECOND * state.zoom);
+      const newTime = (x + scrollX) / (PIXELS_PER_SECOND * state.zoom);
       onPlayheadDrag(Math.max(0, newTime));
     }
   };
@@ -141,7 +143,8 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const newTime = (x + state.scrollOffset) / (PIXELS_PER_SECOND * state.zoom);
+    const scrollX = containerRef.current?.scrollLeft || 0;
+    const newTime = (x + scrollX) / (PIXELS_PER_SECOND * state.zoom);
     
     onPlayheadDrag(Math.max(0, newTime));
   };
@@ -169,15 +172,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={TRACK_HEIGHT}
-      className="timeline-canvas"
-      onMouseDown={handleMouseDown}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    />
+    <div ref={containerRef} style={{ overflowX: 'auto' }}>
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={TRACK_HEIGHT}
+        className="timeline-canvas"
+        onMouseDown={handleMouseDown}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      />
+    </div>
   );
 }
 
