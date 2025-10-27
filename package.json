@@ -11,7 +11,12 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
-  "keywords": ["video-editor", "tauri", "react", "desktop-app"],
+  "keywords": [
+    "video-editor",
+    "tauri",
+    "react",
+    "desktop-app"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
@@ -25,6 +30,7 @@
     "vite": "^7.1.12"
   },
   "dependencies": {
+    "@tauri-apps/plugin-fs": "^2.4.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.4"

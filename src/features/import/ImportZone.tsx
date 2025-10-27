@@ -9,8 +9,57 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Enable window-level drag and drop
+  // Listen for Tauri file-drop events
   useEffect(() => {
+    const setupTauriFileDrop = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        
+        // Listen for file-drop event from Tauri backend
+        await listen('file-drop', (event) => {
+          console.log('Tauri file-drop event:', event);
+          const filePaths = event.payload as string[];
+          
+          if (filePaths && filePaths.length > 0) {
+            // Convert file paths to File objects
+            Promise.all(
+              filePaths.map(async (path) => {
+                try {
+                  // Use Tauri's fs API to read the file
+                  const { readBinaryFile } = await import('@tauri-apps/plugin-fs');
+                  const data = await readBinaryFile(path);
+                  
+                  // Create a File object from the data
+                  const fileName = path.split(/[/\\]/).pop() || 'unknown';
+                  const file = new File([data], fileName, { 
+                    type: 'video/mp4' // Default to video
+                  });
+                  
+                  return file;
+                } catch (error) {
+                  console.error('Error reading file:', path, error);
+                  return null;
+                }
+              })
+            ).then(files => {
+              const validFiles = files.filter(f => f !== null) as File[];
+              if (validFiles.length > 0) {
+                // Create a FileList-like object
+                const dataTransfer = new DataTransfer();
+                validFiles.forEach(file => dataTransfer.items.add(file));
+                onFilesSelected(dataTransfer.files);
+              }
+            });
+          }
+        });
+      } catch (error) {
+        console.log('Not in Tauri environment or API not available');
+      }
+    };
+    
+    setupTauriFileDrop();
+
+    // Also handle standard web drag and drop
     const handleDragover = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -19,7 +68,6 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      console.log('Window level drop - files will be handled by drop zone');
     };
 
     window.addEventListener('dragover', handleDragover);
@@ -29,7 +77,7 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
       window.removeEventListener('dragover', handleDragover);
       window.removeEventListener('drop', handleDrop);
     };
-  }, []);
+  }, [onFilesSelected]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
