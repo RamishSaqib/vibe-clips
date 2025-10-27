@@ -5,11 +5,11 @@ import { useVideos } from '../../contexts/VideoContext';
 import './VideoPlayer.css';
 
 export function VideoPlayer() {
-  const { timelineState } = useTimeline();
+  const { timelineState, setTimelineState } = useTimeline();
   const { videos } = useVideos();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentClip, setCurrentClip] = useState<{ id: string; video: VideoFile; offset: number } | null>(null);
+  const [currentClip, setCurrentClip] = useState<{ id: string; video: VideoFile; offset: number; clip: any } | null>(null);
   const seekTimeoutRef = useRef<number | null>(null);
   const lastSeekTimeRef = useRef<number>(0);
 
@@ -25,10 +25,17 @@ export function VideoPlayer() {
     if (clip) {
       const video = videos.find(v => v.id === clip.videoFileId);
       if (video) {
+        // Calculate the position within the trimmed clip
+        const positionInClip = timelineState.playheadPosition - clip.startTime;
+        
+        // Add the trim start to get the position in the original video
+        const offsetInOriginalVideo = clip.trimStart + positionInClip;
+        
         setCurrentClip({
           id: clip.id,
           video,
-          offset: timelineState.playheadPosition - clip.startTime + clip.trimStart
+          clip,
+          offset: offsetInOriginalVideo
         });
       } else {
         setCurrentClip(null);
@@ -48,20 +55,17 @@ export function VideoPlayer() {
 
       // Debounce seeks to avoid excessive seeking during dragging
       seekTimeoutRef.current = window.setTimeout(() => {
-        if (videoRef.current && currentClip) {
+        if (videoRef.current && currentClip && currentClip.clip) {
           const video = videoRef.current;
+          const clip = currentClip.clip;
           
-          // Clamp to valid video duration (leave 0.1s buffer at end)
-          const maxSeekTime = Math.max(0, video.duration - 0.1);
-          const clampedOffset = Math.max(0, Math.min(currentClip.offset, maxSeekTime));
+          // Clamp to trimmed bounds
+          const clampedOffset = Math.max(clip.trimStart, Math.min(currentClip.offset, clip.trimEnd - 0.1));
           
           // Only seek if the time difference is significant (more than 0.2 seconds)
           const timeDiff = Math.abs(video.currentTime - clampedOffset);
           
-          // Skip seeking if we're at the very end of the video
-          const isNearEnd = clampedOffset >= maxSeekTime - 0.2;
-          
-          if (timeDiff > 0.2 && !isNearEnd) {
+          if (timeDiff > 0.2) {
             try {
               video.currentTime = clampedOffset;
               lastSeekTimeRef.current = clampedOffset;
@@ -80,6 +84,44 @@ export function VideoPlayer() {
     }
   }, [currentClip, isPlaying]);
 
+  // Update playhead as video plays
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isPlaying || !currentClip) return;
+
+    const handleTimeUpdate = () => {
+      if (currentClip.clip) {
+        // Calculate playhead position based on video playback
+        const positionInClip = video.currentTime - currentClip.clip.trimStart;
+        const newPlayheadPosition = currentClip.clip.startTime + positionInClip;
+        
+        // Update playhead
+        setTimelineState(prev => ({ ...prev, playheadPosition: newPlayheadPosition }));
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [isPlaying, currentClip, setTimelineState]);
+
+  // Ensure video doesn't play beyond trim bounds
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !currentClip || !currentClip.clip) return;
+
+    const handleTimeUpdate = () => {
+      const clip = currentClip.clip;
+      // Check if we've reached the end of the trimmed portion
+      if (video.currentTime >= clip.trimEnd) {
+        video.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [isPlaying, currentClip, setIsPlaying]);
+
   const handlePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -88,12 +130,6 @@ export function VideoPlayer() {
         videoRef.current.play();
       }
       setIsPlaying(!isPlaying);
-    }
-  };
-
-  const handleSeek = (time: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = time;
     }
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { TimelineState } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
 import './TimelineCanvas.css';
@@ -8,16 +8,22 @@ interface TimelineCanvasProps {
   videos: VideoFile[];
   onPlayheadDrag: (position: number) => void;
   onVideoDropped: (videoId: string) => void;
+  onClipSelect?: (clipId: string | null) => void;
+  onClipTrim?: (clipId: string, trimStart: number, trimEnd: number) => void;
 }
 
 const PIXELS_PER_SECOND = 30;
 const TRACK_HEIGHT = 60;
 
-export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
+export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, onClipSelect, onClipTrim }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const lastDragUpdateRef = useRef<number>(0);
+  const lastTrimUpdateRef = useRef<number>(0);
+  const trimHandleRef = useRef<'left' | 'right' | null>(null);
+  const trimmingClipRef = useRef<string | null>(null);
+  const initialStateRef = useRef<{ clip: any; video: VideoFile } | null>(null);
 
   // Draw the timeline
   useEffect(() => {
@@ -46,7 +52,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     ctx.fillStyle = '#252525';
     ctx.fillRect(0, 0, width, TRACK_HEIGHT);
 
-    // Draw time ruler (on bottom layer)
+    // Draw time ruler
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     
@@ -56,54 +62,96 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     for (let time = startTime; time <= maxDuration; time += timeInterval) {
       const x = time * PIXELS_PER_SECOND * state.zoom;
       
-      // Draw tick mark
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, 20);
       ctx.stroke();
       
-      // Draw time label
       ctx.fillStyle = '#999';
       ctx.font = '12px sans-serif';
       ctx.fillText(formatTime(time), x + 4, 12);
       ctx.fillStyle = '#555';
     }
 
-    // Draw clips (on top of time markers)
+    // Draw clips
     state.clips.forEach(clip => {
       const video = videos.find(v => v.id === clip.videoFileId);
       if (!video) return;
 
       const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom;
       const clipWidth = clip.duration * PIXELS_PER_SECOND * state.zoom;
+      const isSelected = state.selectedClipId === clip.id;
 
-      // Clip background
-      ctx.fillStyle = state.selectedClipId === clip.id ? '#4a9eff' : '#3a3a3a';
+      // Check if there are trimmed portions
+      const hasLeftTrim = clip.trimStart > 0;
+      const hasRightTrim = clip.trimEnd < video.duration;
+
+      // Draw trimmed regions (darker)
+      if (hasLeftTrim) {
+        const leftTrimWidth = clip.trimStart * PIXELS_PER_SECOND * state.zoom;
+        ctx.fillStyle = isSelected ? '#2d5a9e' : '#2d2d2d';
+        ctx.fillRect(clipX - leftTrimWidth, 5, leftTrimWidth, TRACK_HEIGHT - 10);
+      }
+
+      if (hasRightTrim) {
+        const rightTrimStart = clipX + clipWidth;
+        const rightTrimDuration = video.duration - clip.trimEnd;
+        const rightTrimWidth = rightTrimDuration * PIXELS_PER_SECOND * state.zoom;
+        ctx.fillStyle = isSelected ? '#2d5a9e' : '#2d2d2d';
+        ctx.fillRect(rightTrimStart, 5, rightTrimWidth, TRACK_HEIGHT - 10);
+      }
+
+      // Draw active clip region
+      ctx.fillStyle = isSelected ? '#4a9eff' : '#3a3a3a';
       ctx.fillRect(clipX, 5, clipWidth, TRACK_HEIGHT - 10);
 
       // Clip border
-      ctx.strokeStyle = state.selectedClipId === clip.id ? '#6bb5ff' : '#555';
+      ctx.strokeStyle = isSelected ? '#6bb5ff' : '#555';
       ctx.lineWidth = 2;
-      ctx.strokeRect(clipX, 5, clipWidth, TRACK_HEIGHT - 10);
+      
+      const fullClipStartTime = clip.startTime - clip.trimStart;
+      const fullX = fullClipStartTime * PIXELS_PER_SECOND * state.zoom;
+      const fullWidth = video.duration * PIXELS_PER_SECOND * state.zoom;
+      
+      ctx.strokeRect(fullX, 5, fullWidth, TRACK_HEIGHT - 10);
+
+      // Draw trim handles for selected clips
+      if (isSelected) {
+        const handleWidth = 10;
+        const handleHeight = TRACK_HEIGHT - 10;
+        
+        // Left trim handle (at the start of visible clip)
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(clipX - handleWidth/2, 5, handleWidth, handleHeight);
+        
+        // Right trim handle (at the end of visible clip)
+        ctx.fillRect(clipX + clipWidth - handleWidth/2, 5, handleWidth, handleHeight);
+        
+        // Handle borders
+        ctx.strokeStyle = '#ffed4e';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(clipX - handleWidth/2, 5, handleWidth, handleHeight);
+        ctx.strokeRect(clipX + clipWidth - handleWidth/2, 5, handleWidth, handleHeight);
+      }
 
       // Clip label
-      ctx.fillStyle = '#ddd';
-      ctx.font = '11px sans-serif';
-      const maxWidth = Math.max(clipWidth - 10, 50);
-      const text = video.filename.length > maxWidth / 6 
-        ? video.filename.substring(0, maxWidth / 6) + '...' 
-        : video.filename;
-      ctx.fillText(text, clipX + 8, 25);
-      
-      // Clip duration
-      ctx.fillStyle = '#999';
-      ctx.font = '9px sans-serif';
-      ctx.fillText(formatTime(clip.duration), clipX + 8, 40);
+      if (clipWidth > 40) {
+        ctx.fillStyle = '#ddd';
+        ctx.font = '11px sans-serif';
+        const maxWidth = clipWidth - 10;
+        const text = video.filename.length > maxWidth / 6 
+          ? video.filename.substring(0, maxWidth / 6) + '...' 
+          : video.filename;
+        ctx.fillText(text, clipX + 8, 25);
+        
+        ctx.fillStyle = '#999';
+        ctx.font = '9px sans-serif';
+        ctx.fillText(formatTime(clip.duration), clipX + 8, 40);
+      }
     });
 
-    // Only draw playhead if there are clips on the timeline
+    // Draw playhead
     if (state.clips.length > 0) {
-      // Draw playhead
       const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
       ctx.strokeStyle = '#ff4a4a';
       ctx.lineWidth = 3;
@@ -112,13 +160,11 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       ctx.lineTo(playheadX, TRACK_HEIGHT);
       ctx.stroke();
 
-      // Draw playhead handle (red circle)
       ctx.fillStyle = '#ff4a4a';
       ctx.beginPath();
       ctx.arc(playheadX, TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw handle border for visibility
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -133,50 +179,141 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     e.preventDefault();
     
-    // Calculate max time once for this interaction
     const maxTime = state.clips.length > 0 
       ? Math.max(...state.clips.map(c => c.startTime + c.duration))
       : 10;
     
-    // Get the bounding rectangles
     const containerRect = container.getBoundingClientRect();
-    
-    // Mouse position relative to the container viewport
     const mouseXRelativeToContainer = e.clientX - containerRect.left;
-    
-    // Total position accounting for scroll (in CSS pixels)
     const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
-    
-    // Scale factor: canvas logical pixels / CSS pixels
     const scaleX = canvas.width / container.scrollWidth;
-    
-    // Convert to canvas pixels
     const canvasX = totalCSSX * scaleX;
+    const clickTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
     
-    // Convert to time and clamp
-    const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
-    const clampedTime = Math.max(0, Math.min(newTime, maxTime));
+    // Check for trim handle clicks
+    let clickedClip = null;
+    let clickedHandle: 'left' | 'right' | null = null;
     
-    // Update playhead
+    for (const clip of state.clips) {
+      const video = videos.find(v => v.id === clip.videoFileId);
+      if (!video) continue;
+      
+      const clipStartTime = clip.startTime;
+      const clipEndTime = clip.startTime + clip.duration;
+      const handleToleranceInTime = 8 / (PIXELS_PER_SECOND * state.zoom);
+      
+      // Check left handle (at visible clip start)
+      if (clickTime >= clipStartTime - handleToleranceInTime && 
+          clickTime <= clipStartTime + handleToleranceInTime) {
+        clickedClip = clip;
+        clickedHandle = 'left';
+        break;
+      }
+      
+      // Check right handle (at visible clip end)
+      if (clickTime >= clipEndTime - handleToleranceInTime && 
+          clickTime <= clipEndTime + handleToleranceInTime) {
+        clickedClip = clip;
+        clickedHandle = 'right';
+        break;
+      }
+      
+      // Check clip body
+      if (clickTime >= clipStartTime && clickTime <= clipEndTime) {
+        clickedClip = clip;
+      }
+    }
+    
+    // Handle trim dragging
+    if (clickedClip && clickedHandle && onClipTrim) {
+      const video = videos.find(v => v.id === clickedClip.videoFileId);
+      if (!video) return;
+      
+      const clipId = clickedClip.id;
+      initialStateRef.current = { clip: clickedClip, video };
+      trimHandleRef.current = clickedHandle;
+      trimmingClipRef.current = clipId;
+      isDraggingRef.current = true;
+      
+      const handleMove = (moveEvent: MouseEvent) => {
+        if (!canvas || !container || !initialStateRef.current) return;
+        
+        const now = Date.now();
+        if (now - lastTrimUpdateRef.current < 16) return;
+        lastTrimUpdateRef.current = now;
+        
+        const containerRect = container.getBoundingClientRect();
+        let mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
+        mouseXRelativeToContainer = Math.max(0, Math.min(mouseXRelativeToContainer, containerRect.width));
+        
+        const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
+        const scaleX = canvas.width / container.scrollWidth;
+        const canvasX = totalCSSX * scaleX;
+        const mouseTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
+        
+        const { video, clip: initialClip } = initialStateRef.current;
+        
+        // Calculate the full clip's fixed position
+        const fullClipStartTime = initialClip.startTime - initialClip.trimStart;
+        
+        // Convert mouse time to position within the full video
+        const timeInVideo = mouseTime - fullClipStartTime;
+        
+        if (clickedHandle === 'left') {
+          // Dragging left handle: adjust trimStart
+          // Get current trimEnd from state to prevent crossing
+          const currentClip = state.clips.find(c => c.id === clipId);
+          const currentTrimEnd = currentClip ? currentClip.trimEnd : initialClip.trimEnd;
+          
+          // Allow dragging all the way back to 0 (untrimming)
+          const newTrimStart = Math.max(0, Math.min(timeInVideo, currentTrimEnd - 0.1));
+          onClipTrim(clipId, newTrimStart, currentTrimEnd);
+        } else {
+          // Dragging right handle: adjust trimEnd
+          // Get current trimStart from state to prevent crossing
+          const currentClip = state.clips.find(c => c.id === clipId);
+          const currentTrimStart = currentClip ? currentClip.trimStart : initialClip.trimStart;
+          
+          // Allow dragging all the way to video.duration (untrimming)
+          const newTrimEnd = Math.max(currentTrimStart + 0.1, Math.min(timeInVideo, video.duration));
+          onClipTrim(clipId, currentTrimStart, newTrimEnd);
+        }
+      };
+      
+      const handleUp = () => {
+        trimHandleRef.current = null;
+        trimmingClipRef.current = null;
+        initialStateRef.current = null;
+        isDraggingRef.current = false;
+        document.removeEventListener('mousemove', handleMove);
+        document.removeEventListener('mouseup', handleUp);
+      };
+      
+      document.addEventListener('mousemove', handleMove, { passive: false });
+      document.addEventListener('mouseup', handleUp);
+      return;
+    }
+    
+    // Handle clip selection
+    if (clickedClip && onClipSelect) {
+      onClipSelect(clickedClip.id);
+    } else if (onClipSelect) {
+      onClipSelect(null);
+    }
+    
+    // Handle playhead dragging
+    const clampedTime = Math.max(0, Math.min(clickTime, maxTime));
     onPlayheadDrag(clampedTime);
-    
-    // Start dragging
     isDraggingRef.current = true;
     
-    // Add global listeners for drag
     const handleMove = (moveEvent: MouseEvent) => {
       if (!canvas || !container || !isDraggingRef.current) return;
       
-      // Throttle updates to max 30fps (33ms)
       const now = Date.now();
-      if (now - lastDragUpdateRef.current < 33) {
-        return;
-      }
+      if (now - lastDragUpdateRef.current < 33) return;
       lastDragUpdateRef.current = now;
       
       const containerRect = container.getBoundingClientRect();
-      
-      // Clamp mouse position to container bounds
       let mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
       mouseXRelativeToContainer = Math.max(0, Math.min(mouseXRelativeToContainer, containerRect.width));
       
@@ -184,8 +321,6 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const scaleX = canvas.width / container.scrollWidth;
       const canvasX = totalCSSX * scaleX;
       const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
-      
-      // Clamp time to valid range (reuse maxTime from outer scope)
       const clampedTime = Math.max(0, Math.min(newTime, maxTime));
       
       onPlayheadDrag(clampedTime);
@@ -201,7 +336,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     document.addEventListener('mouseup', handleUp);
   };
 
-  // Handle drag and drop from media library
+  // Handle drag and drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();

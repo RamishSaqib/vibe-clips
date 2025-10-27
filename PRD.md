@@ -21,11 +21,11 @@ This PRD outlines the 7 core features required for MVP submission. Each feature 
 Initialize the Tauri desktop application with React frontend. The app should launch successfully and display a basic UI shell.
 
 ### Acceptance Criteria
-- [ ] Tauri project initialized with React template
-- [ ] App launches in development mode (`npm run tauri dev`)
-- [ ] Basic window configuration set (title: "VibeClips", minimum size: 1200x800)
-- [ ] React development environment configured with TypeScript
-- [ ] Basic UI layout with placeholder sections for: Import, Timeline, Preview, Export
+- [x] Tauri project initialized with React template
+- [x] App launches in development mode (`npm run tauri dev`)
+- [x] Basic window configuration set (title: "VibeClips", minimum size: 1200x800)
+- [x] React development environment configured with TypeScript
+- [x] Basic UI layout with placeholder sections for: Import, Timeline, Preview, Export
 
 ### Technical Implementation
 - Use `create-tauri-app` with React + TypeScript template
@@ -66,12 +66,12 @@ Initialize the Tauri desktop application with React frontend. The app should lau
 Enable users to import video files (MP4, MOV) into the application using drag & drop or file picker.
 
 ### Acceptance Criteria
-- [ ] Drag and drop zone for video files
-- [ ] File picker button to browse and select videos
-- [ ] Support for MP4 and MOV file formats
-- [ ] Display imported files in a media library panel
-- [ ] Show basic metadata for each file (filename, duration, file size)
-- [ ] Store imported file paths in application state
+- [x] Drag and drop zone for video files
+- [x] File picker button to browse and select videos
+- [x] Support for MP4 and MOV file formats
+- [x] Display imported files in a media library panel
+- [x] Show basic metadata for each file (filename, duration, file size)
+- [x] Store imported file paths in application state
 
 ### Technical Implementation
 - Create `/src/features/import/` components:
@@ -114,12 +114,12 @@ Enable users to import video files (MP4, MOV) into the application using drag & 
 Build a visual timeline interface using HTML5 Canvas that displays imported clips and allows basic interaction.
 
 ### Acceptance Criteria
-- [ ] Canvas-based timeline with time ruler (showing seconds/minutes)
-- [ ] Drag clips from media library onto timeline
-- [ ] Display clips as visual blocks on timeline with thumbnails
-- [ ] Show playhead (current time indicator) that can be dragged
-- [ ] Display clip duration and position on timeline
-- [ ] Single track for MVP (multi-track in future)
+- [x] Canvas-based timeline with time ruler (showing seconds/minutes)
+- [x] Drag clips from media library onto timeline
+- [x] Display clips as visual blocks on timeline with thumbnails
+- [x] Show playhead (current time indicator) that can be dragged
+- [x] Display clip duration and position on timeline
+- [x] Single track for MVP (multi-track in future)
 
 ### Technical Implementation
 - Create `/src/features/timeline/` components:
@@ -166,12 +166,12 @@ Build a visual timeline interface using HTML5 Canvas that displays imported clip
 Implement a video player that displays the current frame at the playhead position and allows playback of timeline content.
 
 ### Acceptance Criteria
-- [ ] Video player displays in preview panel
-- [ ] Play/pause controls functional
-- [ ] Player shows frame at current playhead position
-- [ ] Scrubbing playhead updates preview in real-time
-- [ ] Audio synchronized with video playback
-- [ ] Playback respects timeline clip arrangement
+- [x] Video player displays in preview panel
+- [x] Play/pause controls functional
+- [x] Player shows frame at current playhead position
+- [x] Scrubbing playhead updates preview in real-time
+- [x] Audio synchronized with video playback
+- [x] Playback respects timeline clip arrangement
 
 ### Technical Implementation
 - Create `/src/features/preview/` components:
@@ -354,13 +354,13 @@ Create distributable desktop application for Windows and/or macOS.
 
 All 7 PRs merged and tested by **Tuesday, October 28th at 10:59 PM CT**:
 
-1. ✅ Desktop app launches
-2. ✅ Video import (drag & drop + file picker)
-3. ✅ Timeline shows imported clips
-4. ✅ Video preview plays clips
-5. ✅ Trim clips with in/out points
-6. ✅ Export to MP4
-7. ✅ Packaged native app
+1. ✅ Desktop app launches *(Completed)*
+2. ✅ Video import (drag & drop + file picker) *(Completed)*
+3. ✅ Timeline shows imported clips *(Completed)*
+4. ✅ Video preview plays clips *(Completed)*
+5. ⏳ Trim clips with in/out points *(In Progress)*
+6. ⏳ Export to MP4 *(Pending)*
+7. ⏳ Packaged native app *(Pending)*
 
 ---
 

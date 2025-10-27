@@ -37,6 +37,64 @@ export function Timeline() {
     });
   }, [videos, setTimelineState]);
 
+  const handleClipSelect = useCallback((clipId: string | null) => {
+    setTimelineState(prev => ({
+      ...prev,
+      selectedClipId: clipId,
+    }));
+  }, [setTimelineState]);
+
+  const handleClipTrim = useCallback((clipId: string, trimStart: number, trimEnd: number) => {
+    setTimelineState(prev => {
+      const updatedClips = prev.clips.map(clip => {
+        if (clip.id === clipId) {
+          const originalVideo = videos.find(v => v.id === clip.videoFileId);
+          if (!originalVideo) return clip;
+          
+          // Ensure valid trim values
+          const newTrimStart = Math.max(0, Math.min(trimStart, originalVideo.duration));
+          const newTrimEnd = Math.max(newTrimStart + 0.1, Math.min(trimEnd, originalVideo.duration));
+          
+          // Calculate new duration (visible portion)
+          const newDuration = newTrimEnd - newTrimStart;
+          
+          // IMPORTANT: Keep the full clip position fixed
+          // The full clip always starts at: startTime - trimStart
+          // This position should NEVER change during trimming
+          const fullClipStartTime = clip.startTime - clip.trimStart;
+          
+          // The visible clip starts at: fullClipStartTime + newTrimStart
+          const newStartTime = fullClipStartTime + newTrimStart;
+          
+          console.log('Trimming:', {
+            clipId,
+            oldTrimStart: clip.trimStart,
+            newTrimStart,
+            oldTrimEnd: clip.trimEnd,
+            newTrimEnd,
+            fullClipStartTime,
+            oldStartTime: clip.startTime,
+            newStartTime
+          });
+          
+          return {
+            ...clip,
+            startTime: newStartTime,
+            trimStart: newTrimStart,
+            trimEnd: newTrimEnd,
+            duration: newDuration,
+          };
+        }
+        return clip;
+      });
+      
+      return {
+        ...prev,
+        clips: updatedClips,
+      };
+    });
+  }, [videos, setTimelineState]);
+
 
   return (
     <div className="timeline-container">
@@ -59,6 +117,8 @@ export function Timeline() {
           videos={videos}
           onPlayheadDrag={handlePlayheadDrag}
           onVideoDropped={handleVideoDropped}
+          onClipSelect={handleClipSelect}
+          onClipTrim={handleClipTrim}
         />
       </div>
 
@@ -78,4 +138,3 @@ function getMaxTimelineTime(clips: TimelineClip[]): string {
   const secs = Math.floor(maxTime % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
-
