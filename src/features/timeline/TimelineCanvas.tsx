@@ -126,43 +126,45 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    e.preventDefault();
+    
     const rect = canvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    console.log('Click at:', clickX);
-    
-    // Always start dragging
-    setIsDraggingPlayhead(true);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    
-    // Update playhead immediately
     const scrollX = containerRef.current?.scrollLeft || 0;
     const totalX = clickX + scrollX;
     const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
-    console.log('Setting time to:', newTime, 'from clickX:', clickX, 'scrollX:', scrollX);
-    onPlayheadDrag(Math.max(0, newTime));
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDraggingPlayhead) return;
     
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const scrollX = containerRef.current?.scrollLeft || 0;
-    const totalX = mouseX + scrollX;
-    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+    console.log('Click at:', clickX, 'TotalX:', totalX, 'Time:', newTime);
     
+    // Start dragging
+    setIsDraggingPlayhead(true);
+    
+    // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
+    
+    // Add global listeners for drag
+    const handleMove = (moveEvent: MouseEvent) => {
+      if (!canvas || !isDraggingPlayhead) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = moveEvent.clientX - rect.left;
+      const scrollX = containerRef.current?.scrollLeft || 0;
+      const totalX = mouseX + scrollX;
+      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+      
+      onPlayheadDrag(Math.max(0, newTime));
+    };
+    
+    const handleUp = () => {
+      setIsDraggingPlayhead(false);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+    
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
   };
 
-  const handleMouseUp = () => {
-    setIsDraggingPlayhead(false);
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-  };
 
   // Handle drag and drop from media library
   const handleDragOver = (e: React.DragEvent) => {
