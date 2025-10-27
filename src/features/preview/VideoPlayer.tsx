@@ -10,6 +10,8 @@ export function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentClip, setCurrentClip] = useState<{ id: string; video: VideoFile; offset: number } | null>(null);
+  const seekTimeoutRef = useRef<number | null>(null);
+  const lastSeekTimeRef = useRef<number>(0);
 
   // Find the current clip at the playhead position
   useEffect(() => {
@@ -36,12 +38,47 @@ export function VideoPlayer() {
     }
   }, [timelineState.playheadPosition, timelineState.clips, videos]);
 
-  // Update video position when clip or playhead changes
+  // Update video position when clip or playhead changes (with debouncing)
   useEffect(() => {
-    if (videoRef.current && currentClip) {
-      videoRef.current.currentTime = currentClip.offset;
+    if (videoRef.current && currentClip && !isPlaying) {
+      // Clear any pending seek
+      if (seekTimeoutRef.current !== null) {
+        clearTimeout(seekTimeoutRef.current);
+      }
+
+      // Debounce seeks to avoid excessive seeking during dragging
+      seekTimeoutRef.current = window.setTimeout(() => {
+        if (videoRef.current && currentClip) {
+          const video = videoRef.current;
+          
+          // Clamp to valid video duration (leave 0.1s buffer at end)
+          const maxSeekTime = Math.max(0, video.duration - 0.1);
+          const clampedOffset = Math.max(0, Math.min(currentClip.offset, maxSeekTime));
+          
+          // Only seek if the time difference is significant (more than 0.2 seconds)
+          const timeDiff = Math.abs(video.currentTime - clampedOffset);
+          
+          // Skip seeking if we're at the very end of the video
+          const isNearEnd = clampedOffset >= maxSeekTime - 0.2;
+          
+          if (timeDiff > 0.2 && !isNearEnd) {
+            try {
+              video.currentTime = clampedOffset;
+              lastSeekTimeRef.current = clampedOffset;
+            } catch (e) {
+              console.error('Seek error:', e);
+            }
+          }
+        }
+      }, 150); // Increased to 150ms debounce
+
+      return () => {
+        if (seekTimeoutRef.current !== null) {
+          clearTimeout(seekTimeoutRef.current);
+        }
+      };
     }
-  }, [currentClip]);
+  }, [currentClip, isPlaying]);
 
   const handlePlayPause = () => {
     if (videoRef.current) {
@@ -95,4 +132,3 @@ export function VideoPlayer() {
     </div>
   );
 }
-

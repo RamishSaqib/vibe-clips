@@ -10,13 +10,14 @@ interface TimelineCanvasProps {
   onVideoDropped: (videoId: string) => void;
 }
 
-const PIXELS_PER_SECOND = 30; // Reduced from 100 to show more content without scrolling
+const PIXELS_PER_SECOND = 30;
 const TRACK_HEIGHT = 60;
 
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const lastDragUpdateRef = useRef<number>(0);
 
   // Draw the timeline
   useEffect(() => {
@@ -132,8 +133,12 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     e.preventDefault();
     
+    // Calculate max time once for this interaction
+    const maxTime = state.clips.length > 0 
+      ? Math.max(...state.clips.map(c => c.startTime + c.duration))
+      : 10;
+    
     // Get the bounding rectangles
-    const canvasRect = canvas.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
     
     // Mouse position relative to the container viewport
@@ -148,26 +153,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Convert to canvas pixels
     const canvasX = totalCSSX * scaleX;
     
-    // Convert to time
+    // Convert to time and clamp
     const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
-    
-    // Clamp time to valid range
-    const maxTime = Math.max(...state.clips.map(c => c.startTime + c.duration), 0);
     const clampedTime = Math.max(0, Math.min(newTime, maxTime));
-    
-    console.log('[TIMELINE] MouseDown:', JSON.stringify({
-      mouseXRelativeToContainer: mouseXRelativeToContainer.toFixed(2),
-      scrollLeft: container.scrollLeft.toFixed(2),
-      totalCSSX: totalCSSX.toFixed(2),
-      scaleX: scaleX.toFixed(4),
-      canvasX: canvasX.toFixed(2),
-      newTime: newTime.toFixed(2),
-      clampedTime: clampedTime.toFixed(2),
-      canvasWidth: canvas.width,
-      containerScrollWidth: container.scrollWidth,
-      containerClientWidth: container.clientWidth,
-      dpr: window.devicePixelRatio
-    }, null, 2));
     
     // Update playhead
     onPlayheadDrag(clampedTime);
@@ -179,15 +167,25 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const handleMove = (moveEvent: MouseEvent) => {
       if (!canvas || !container || !isDraggingRef.current) return;
       
+      // Throttle updates to max 30fps (33ms)
+      const now = Date.now();
+      if (now - lastDragUpdateRef.current < 33) {
+        return;
+      }
+      lastDragUpdateRef.current = now;
+      
       const containerRect = container.getBoundingClientRect();
-      const mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
+      
+      // Clamp mouse position to container bounds
+      let mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
+      mouseXRelativeToContainer = Math.max(0, Math.min(mouseXRelativeToContainer, containerRect.width));
+      
       const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
       const scaleX = canvas.width / container.scrollWidth;
       const canvasX = totalCSSX * scaleX;
       const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
       
-      // Clamp time to valid range
-      const maxTime = Math.max(...state.clips.map(c => c.startTime + c.duration), 0);
+      // Clamp time to valid range (reuse maxTime from outer scope)
       const clampedTime = Math.max(0, Math.min(newTime, maxTime));
       
       onPlayheadDrag(clampedTime);
@@ -202,7 +200,6 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
   };
-
 
   // Handle drag and drop from media library
   const handleDragOver = (e: React.DragEvent) => {
@@ -224,7 +221,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
   const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 1200);
 
   return (
-    <div ref={containerRef} style={{ overflowX: 'auto', width: '100%' }}>
+    <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%', height: TRACK_HEIGHT + 'px' }}>
       <canvas
         ref={canvasRef}
         width={canvasWidth}
@@ -233,6 +230,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
         onMouseDown={handleMouseDown}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        style={{ display: 'block', width: canvasWidth + 'px', height: TRACK_HEIGHT + 'px', minWidth: '100%' }}
       />
     </div>
   );
@@ -245,9 +243,8 @@ function formatTime(seconds: number): string {
 }
 
 function getTimeInterval(zoom: number): number {
-  if (zoom >= 4) return 1; // 1 second
-  if (zoom >= 2) return 5; // 5 seconds
-  if (zoom >= 1) return 10; // 10 seconds
-  return 30; // 30 seconds
+  if (zoom >= 4) return 1;
+  if (zoom >= 2) return 5;
+  if (zoom >= 1) return 10;
+  return 30;
 }
-
