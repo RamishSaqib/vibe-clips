@@ -36,6 +36,11 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
               key={video.id} 
               className="media-library-item"
               onClick={() => onSelect?.(video)}
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('video-id', video.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
             >
               <div className="media-thumbnail">
                 <video 

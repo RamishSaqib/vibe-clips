@@ -7,12 +7,13 @@ interface TimelineCanvasProps {
   state: TimelineState;
   videos: VideoFile[];
   onPlayheadDrag: (position: number) => void;
+  onVideoDropped: (videoId: string) => void;
 }
 
 const PIXELS_PER_SECOND = 100;
 const TRACK_HEIGHT = 60;
 
-export function TimelineCanvas({ state, videos, onPlayheadDrag }: TimelineCanvasProps) {
+export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
@@ -147,6 +148,22 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag }: TimelineCanvas
     document.removeEventListener('mouseup', handleMouseUp);
   };
 
+  // Handle drag and drop from media library
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const videoId = e.dataTransfer.getData('video-id');
+    if (videoId) {
+      onVideoDropped(videoId);
+    }
+  };
+
   return (
     <canvas
       ref={canvasRef}
@@ -154,6 +171,8 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag }: TimelineCanvas
       height={TRACK_HEIGHT}
       className="timeline-canvas"
       onMouseDown={handleMouseDown}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     />
   );
 }

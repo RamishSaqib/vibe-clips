@@ -18,6 +18,26 @@ export function Timeline() {
     setTimelineState(prev => ({ ...prev, playheadPosition: position }));
   }, []);
 
+  const handleVideoDropped = useCallback((videoId: string) => {
+    const video = videos.find(v => v.id === videoId);
+    if (!video) return;
+
+    const newClip: TimelineClip = {
+      id: `clip-${Date.now()}`,
+      videoFileId: video.id,
+      startTime: timelineState.playheadPosition,
+      duration: video.duration,
+      trimStart: 0,
+      trimEnd: video.duration,
+      track: 0,
+    };
+    
+    setTimelineState(prev => ({
+      ...prev,
+      clips: [...prev.clips, newClip],
+    }));
+  }, [videos, timelineState.playheadPosition]);
+
   const handleDragFromLibrary = useCallback((video: VideoFile) => {
     const newClip: TimelineClip = {
       id: `clip-${Date.now()}`,
@@ -55,6 +75,7 @@ export function Timeline() {
           state={timelineState}
           videos={videos}
           onPlayheadDrag={handlePlayheadDrag}
+          onVideoDropped={handleVideoDropped}
         />
       </div>
 
