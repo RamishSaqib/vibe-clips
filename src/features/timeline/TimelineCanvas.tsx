@@ -134,7 +134,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width; // Canvas pixels per CSS pixel
     const clickX = (e.clientX - rect.left) * scaleX;
-    const scrollX = containerRef.current?.scrollLeft || 0;
+    const scrollX = (containerRef.current?.scrollLeft || 0) * scaleX; // Convert scroll to canvas pixels
     const totalX = clickX + scrollX;
     const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
@@ -151,7 +151,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const mouseX = (moveEvent.clientX - rect.left) * scaleX;
-      const scrollX = containerRef.current?.scrollLeft || 0;
+      const scrollX = (containerRef.current?.scrollLeft || 0) * scaleX; // Convert scroll to canvas pixels
       const totalX = mouseX + scrollX;
       const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
       
