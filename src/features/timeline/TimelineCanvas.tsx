@@ -132,26 +132,39 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
 
     e.preventDefault();
     
-    // Get canvas bounding rect
-    const rect = canvas.getBoundingClientRect();
+    // Get the bounding rectangles
+    const canvasRect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
     
-    // Get the device pixel ratio (accounts for high-DPI displays)
-    const devicePixelRatio = window.devicePixelRatio || 1;
+    // Mouse position relative to the container viewport
+    const mouseXRelativeToContainer = e.clientX - containerRect.left;
     
-    // Calculate mouse position relative to the visible part of the canvas
-    const mouseXInViewport = e.clientX - rect.left;
+    // Total position accounting for scroll (in CSS pixels)
+    const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
     
-    // Get the scroll position (in CSS pixels)
-    const scrollX = container.scrollLeft;
+    // Scale factor: canvas logical pixels / CSS pixels
+    const scaleX = canvas.width / container.scrollWidth;
     
-    // Calculate the total X position (viewport position + scroll offset)
-    // Account for device pixel ratio for proper scaling on high-DPI displays
-    const totalX = (mouseXInViewport + scrollX) * devicePixelRatio;
+    // Convert to canvas pixels
+    const canvasX = totalCSSX * scaleX;
     
     // Convert to time
-    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+    const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
     
-    // Update playhead immediately
+    console.log('[TIMELINE] MouseDown:', JSON.stringify({
+      mouseXRelativeToContainer: mouseXRelativeToContainer.toFixed(2),
+      scrollLeft: container.scrollLeft.toFixed(2),
+      totalCSSX: totalCSSX.toFixed(2),
+      scaleX: scaleX.toFixed(4),
+      canvasX: canvasX.toFixed(2),
+      newTime: newTime.toFixed(2),
+      canvasWidth: canvas.width,
+      containerScrollWidth: container.scrollWidth,
+      containerClientWidth: container.clientWidth,
+      dpr: window.devicePixelRatio
+    }, null, 2));
+    
+    // Update playhead
     onPlayheadDrag(Math.max(0, newTime));
     
     // Start dragging
@@ -161,26 +174,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const handleMove = (moveEvent: MouseEvent) => {
       if (!canvas || !container || !isDraggingRef.current) return;
       
-      // Get canvas bounding rect
-      const rect = canvas.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
+      const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
+      const scaleX = canvas.width / container.scrollWidth;
+      const canvasX = totalCSSX * scaleX;
+      const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
       
-      // Get the device pixel ratio (accounts for high-DPI displays)
-      const devicePixelRatio = window.devicePixelRatio || 1;
-      
-      // Calculate mouse position relative to the visible part of the canvas
-      const mouseXInViewport = moveEvent.clientX - rect.left;
-      
-      // Get the scroll position (in CSS pixels)
-      const scrollX = container.scrollLeft;
-      
-      // Calculate the total X position (viewport position + scroll offset)
-      // Account for device pixel ratio for proper scaling on high-DPI displays
-      const totalX = (mouseXInViewport + scrollX) * devicePixelRatio;
-      
-      // Convert to time
-      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
-      
-      // Always update during drag to follow cursor
       onPlayheadDrag(Math.max(0, newTime));
     };
     
