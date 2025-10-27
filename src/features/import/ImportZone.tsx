@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './ImportZone.css';
 
 interface ImportZoneProps {
@@ -8,6 +8,30 @@ interface ImportZoneProps {
 export function ImportZone({ onFilesSelected }: ImportZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle Tauri's global file drop event
+  useEffect(() => {
+    const handleGlobalDrop = async () => {
+      // Tauri may handle drag and drop at the window level
+      // This would need to be implemented in the Rust backend
+      console.log('Global drop handler would be called here if implemented in Tauri backend');
+    };
+
+    // Listen for drag events on the whole window
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      console.log('Window level drop event');
+    });
+
+    return () => {
+      window.removeEventListener('dragover', () => {});
+      window.removeEventListener('drop', () => {});
+    };
+  }, []);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
