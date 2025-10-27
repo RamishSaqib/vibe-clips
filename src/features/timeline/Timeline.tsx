@@ -1,18 +1,13 @@
-import { useState, useCallback } from 'react';
-import type { TimelineState, TimelineClip } from '../../types/timeline';
+import { useCallback } from 'react';
+import type { TimelineClip } from '../../types/timeline';
 import { TimelineCanvas } from './TimelineCanvas';
 import { useVideos } from '../../contexts/VideoContext';
+import { useTimeline } from '../../contexts/TimelineContext';
 import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
-  const [timelineState, setTimelineState] = useState<TimelineState>({
-    clips: [],
-    playheadPosition: 0,
-    zoom: 1,
-    scrollOffset: 0,
-    selectedClipId: null,
-  });
+  const { timelineState, setTimelineState } = useTimeline();
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => ({ ...prev, playheadPosition: position }));
@@ -38,22 +33,6 @@ export function Timeline() {
     }));
   }, [videos, timelineState.playheadPosition]);
 
-  const handleDragFromLibrary = useCallback((video: VideoFile) => {
-    const newClip: TimelineClip = {
-      id: `clip-${Date.now()}`,
-      videoFileId: video.id,
-      startTime: timelineState.playheadPosition,
-      duration: video.duration,
-      trimStart: 0,
-      trimEnd: video.duration,
-      track: 0,
-    };
-    
-    setTimelineState(prev => ({
-      ...prev,
-      clips: [...prev.clips, newClip],
-    }));
-  }, [timelineState.playheadPosition]);
 
   return (
     <div className="timeline-container">

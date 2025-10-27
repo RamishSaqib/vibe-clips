@@ -1,11 +1,14 @@
 import { Import } from './features/import';
 import { Timeline } from './features/timeline';
+import { VideoPlayer } from './features/preview';
 import { VideoProvider } from './contexts/VideoContext';
+import { TimelineProvider } from './contexts/TimelineContext';
 import './App.css'
 
 function App() {
   return (
     <VideoProvider>
+    <TimelineProvider>
     <div className="app">
       <header className="app-header">
         <h1>Welcome to VibeClips</h1>
@@ -21,9 +24,8 @@ function App() {
           <Timeline />
         </div>
 
-        <div className="placeholder-section preview-section">
-          <h2>Preview</h2>
-          <p>Video preview will appear here</p>
+        <div className="preview-section">
+          <VideoPlayer />
         </div>
 
         <div className="placeholder-section export-section">
@@ -32,6 +34,7 @@ function App() {
         </div>
       </main>
     </div>
+    </TimelineProvider>
     </VideoProvider>
   )
 }
