@@ -132,11 +132,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     e.preventDefault();
     
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width; // Canvas pixels per CSS pixel
-    const clickX = (e.clientX - rect.left) * scaleX;
-    const scrollX = (containerRef.current?.scrollLeft || 0) * scaleX; // Convert scroll to canvas pixels
-    const totalX = clickX + scrollX;
-    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+    const clickX = e.clientX - rect.left; // CSS pixels
+    const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels
+    const totalX = clickX + scrollX; // Total CSS pixels
+    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom); // Convert to seconds
     
     // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
@@ -149,11 +148,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       if (!canvas || !isDraggingRef.current) return;
       
       const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const mouseX = (moveEvent.clientX - rect.left) * scaleX;
-      const scrollX = (containerRef.current?.scrollLeft || 0) * scaleX; // Convert scroll to canvas pixels
-      const totalX = mouseX + scrollX;
-      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+      const mouseX = moveEvent.clientX - rect.left; // CSS pixels
+      const scrollX = containerRef.current?.scrollLeft || 0; // CSS pixels  
+      const totalX = mouseX + scrollX; // Total CSS pixels
+      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom); // Convert to seconds
       
       // Always update during drag to follow cursor
       onPlayheadDrag(Math.max(0, newTime));
@@ -199,7 +197,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
         onMouseDown={handleMouseDown}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        style={{ display: 'block' }}
+        style={{ display: 'block', width: canvasWidth + 'px', height: TRACK_HEIGHT + 'px' }}
       />
     </div>
   );
