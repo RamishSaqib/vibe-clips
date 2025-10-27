@@ -31,7 +31,8 @@
   gap: 1rem;
   padding: 1rem;
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 600px;
 }
 
@@ -76,6 +77,10 @@
 .preview-section {
   grid-column: 1;
   grid-row: 2;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .export-section {
