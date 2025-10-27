@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import type { TimelineClip } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
 import './ExportDialog.css';
@@ -68,7 +69,6 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
 
   const handleBrowse = async () => {
     try {
-      const { save } = await import('@tauri-apps/plugin-dialog');
       const path = await save({
         title: 'Save Exported Video',
         defaultPath: 'output.mp4',
