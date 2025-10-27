@@ -9,12 +9,12 @@ pub fn run() {
       
       // Listen for file-drop events from the OS
       app.handle().listen("tauri://file-drop", move |event| {
-        if let Some(paths) = event.payload() {
-          println!("Files dropped: {:?}", paths);
-          
-          // Emit the file paths to the frontend
-          let _ = app_handle.emit("file-drop", paths);
-        }
+        println!("File drop event received");
+        let payload = event.payload();
+        println!("Files dropped: {:?}", payload);
+        
+        // Emit the file paths to the frontend
+        let _ = app_handle.emit("file-drop", payload);
       });
       
       // Listen for file-drop-hover
