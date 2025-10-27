@@ -2,7 +2,6 @@ use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::fs;
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
