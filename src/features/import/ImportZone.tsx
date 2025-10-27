@@ -80,21 +80,32 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
     e.stopPropagation();
     setIsDragging(false);
 
+    console.log('handleDrop called');
+    console.log('dataTransfer.files:', e.dataTransfer.files);
+    console.log('dataTransfer.types:', Array.from(e.dataTransfer.types));
+    
     const files = e.dataTransfer.files;
     
     if (files && files.length > 0) {
+      console.log('Files found:', files.length);
+      
       // Filter to video files
       const videoFiles = Array.from(files).filter(file => {
         const isVideo = file.type.startsWith('video/') || 
                        file.name.endsWith('.mp4') || 
                        file.name.endsWith('.mov');
+        console.log('Checking file:', file.name, 'type:', file.type, 'isVideo:', isVideo);
         return isVideo;
       });
+      
+      console.log('Video files after filtering:', videoFiles.length);
       
       if (videoFiles.length > 0) {
         // Pass the files from dataTransfer
         onFilesSelected(files);
       }
+    } else {
+      console.log('No files in dataTransfer');
     }
   };
 
