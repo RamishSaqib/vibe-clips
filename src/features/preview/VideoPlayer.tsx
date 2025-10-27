@@ -60,6 +60,14 @@ export function VideoPlayer() {
     }
   };
 
+  if (timelineState.clips.length === 0) {
+    return (
+      <div className="video-player-empty">
+        <p>Import video and add to timeline</p>
+      </div>
+    );
+  }
+  
   if (!currentClip) {
     return (
       <div className="video-player-empty">

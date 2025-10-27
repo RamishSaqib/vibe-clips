@@ -16,7 +16,7 @@ const TRACK_HEIGHT = 60;
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  const isDraggingRef = useRef(false);
 
   // Draw the timeline
   useEffect(() => {
@@ -135,17 +135,15 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const totalX = clickX + scrollX;
     const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
-    console.log('Click at:', e.clientX - rect.left, 'Scaled:', clickX, 'TotalX:', totalX, 'Time:', newTime);
-    
-    // Start dragging
-    setIsDraggingPlayhead(true);
-    
     // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
     
+    // Start dragging
+    isDraggingRef.current = true;
+    
     // Add global listeners for drag
     const handleMove = (moveEvent: MouseEvent) => {
-      if (!canvas || !isDraggingPlayhead) return;
+      if (!canvas || !isDraggingRef.current) return;
       
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -158,7 +156,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     };
     
     const handleUp = () => {
-      setIsDraggingPlayhead(false);
+      isDraggingRef.current = false;
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleUp);
     };
