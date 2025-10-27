@@ -38,5 +38,11 @@ src-tauri/target/debug/
 tmp/
 temp/
 
-# MD files
-RUBRIC.md
+# Rust build artifacts
+target/
+plans/
+
+# Temporary files
+*.tmp
+tmp/
+temp/
