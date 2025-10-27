@@ -38,3 +38,5 @@ src-tauri/target/debug/
 tmp/
 temp/
 
+# MD files
+RUBRIC.md

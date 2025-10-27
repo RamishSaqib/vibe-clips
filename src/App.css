@@ -1,0 +1,80 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+.app-header {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #333;
+  background: #252525;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.app-header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.app-main {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  flex: 1;
+  overflow: hidden;
+}
+
+.placeholder-section {
+  padding: 1.5rem;
+  border: 2px dashed #555;
+  border-radius: 8px;
+  background: #222;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #bbb;
+}
+
+.placeholder-section p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #888;
+}
+
+.import-section {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.timeline-section {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.preview-section {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.export-section {
+  grid-column: 2;
+  grid-row: 1;
+}
+
