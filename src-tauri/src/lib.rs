@@ -1,5 +1,5 @@
-use tauri::{Manager, Emitter, Listener};
-use serde_json;
+use tauri::{Emitter, Listener};
+use serde_json::Value;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -10,8 +10,9 @@ pub fn run() {
       
       // Listen for file-drop events from the OS
       app.handle().listen("tauri://file-drop", move |event| {
-        let payload: Vec<String> = serde_json::from_value(event.payload().clone())
-            .unwrap_or_default();
+        let payload_str = event.payload() as &str;
+        let payload: Vec<String> = serde_json::from_str(payload_str)
+            .unwrap_or_else(|_| vec![]);
         
         if !payload.is_empty() {
             // Emit the file paths to the frontend
