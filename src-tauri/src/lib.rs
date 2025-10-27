@@ -9,12 +9,13 @@ pub fn run() {
       
       // Listen for file-drop events from the OS
       app.handle().listen("tauri://file-drop", move |event| {
-        println!("File drop event received");
-        let payload = event.payload();
-        println!("Files dropped: {:?}", payload);
+        let payload: Vec<String> = serde_json::from_value(event.payload().clone())
+            .unwrap_or_default();
         
-        // Emit the file paths to the frontend
-        let _ = app_handle.emit("file-drop", payload);
+        if !payload.is_empty() {
+            // Emit the file paths to the frontend
+            let _ = app_handle.emit("file-drop", &payload);
+        }
       });
       
       // Listen for file-drop-hover

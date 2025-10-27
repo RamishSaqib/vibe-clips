@@ -56,25 +56,6 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
     };
     
     setupTauriFileDrop();
-
-    // Also handle standard web drag and drop
-    const handleDragover = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    window.addEventListener('dragover', handleDragover);
-    window.addEventListener('drop', handleDrop);
-
-    return () => {
-      window.removeEventListener('dragover', handleDragover);
-      window.removeEventListener('drop', handleDrop);
-    };
   }, [onFilesSelected]);
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -110,9 +91,8 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
         return isVideo;
       });
       
-      
       if (videoFiles.length > 0) {
-        // Simply pass the files from dataTransfer directly
+        // Pass the files from dataTransfer
         onFilesSelected(files);
       }
     }
