@@ -151,6 +151,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Convert to time
     const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
     
+    // Clamp time to valid range
+    const maxTime = Math.max(...state.clips.map(c => c.startTime + c.duration), 0);
+    const clampedTime = Math.max(0, Math.min(newTime, maxTime));
+    
     console.log('[TIMELINE] MouseDown:', JSON.stringify({
       mouseXRelativeToContainer: mouseXRelativeToContainer.toFixed(2),
       scrollLeft: container.scrollLeft.toFixed(2),
@@ -158,6 +162,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       scaleX: scaleX.toFixed(4),
       canvasX: canvasX.toFixed(2),
       newTime: newTime.toFixed(2),
+      clampedTime: clampedTime.toFixed(2),
       canvasWidth: canvas.width,
       containerScrollWidth: container.scrollWidth,
       containerClientWidth: container.clientWidth,
@@ -165,7 +170,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     }, null, 2));
     
     // Update playhead
-    onPlayheadDrag(Math.max(0, newTime));
+    onPlayheadDrag(clampedTime);
     
     // Start dragging
     isDraggingRef.current = true;
@@ -181,7 +186,11 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const canvasX = totalCSSX * scaleX;
       const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
       
-      onPlayheadDrag(Math.max(0, newTime));
+      // Clamp time to valid range
+      const maxTime = Math.max(...state.clips.map(c => c.startTime + c.duration), 0);
+      const clampedTime = Math.max(0, Math.min(newTime, maxTime));
+      
+      onPlayheadDrag(clampedTime);
     };
     
     const handleUp = () => {
