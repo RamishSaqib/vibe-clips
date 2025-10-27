@@ -17,7 +17,6 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
         
         // Listen for file-drop event from Tauri backend
         await listen('file-drop', (event) => {
-          console.log('Tauri file-drop event:', event);
           const filePaths = event.payload as string[];
           
           if (filePaths && filePaths.length > 0) {
@@ -53,7 +52,6 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
           }
         });
       } catch (error) {
-        console.log('Not in Tauri environment or API not available');
       }
     };
     
@@ -102,7 +100,6 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
     setIsDragging(false);
 
     const files = e.dataTransfer.files;
-    console.log('Files dropped:', files.length, Array.from(files).map(f => f.name));
     
     if (files && files.length > 0) {
       // Filter to video files
@@ -110,11 +107,9 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
         const isVideo = file.type.startsWith('video/') || 
                        file.name.endsWith('.mp4') || 
                        file.name.endsWith('.mov');
-        console.log('File:', file.name, 'Type:', file.type, 'IsVideo:', isVideo);
         return isVideo;
       });
       
-      console.log('Video files after filtering:', videoFiles.length);
       
       if (videoFiles.length > 0) {
         // Simply pass the files from dataTransfer directly
