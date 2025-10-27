@@ -135,6 +135,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Get canvas bounding rect
     const rect = canvas.getBoundingClientRect();
     
+    // Get the device pixel ratio (accounts for high-DPI displays)
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    
     // Calculate mouse position relative to the visible part of the canvas
     const mouseXInViewport = e.clientX - rect.left;
     
@@ -142,9 +145,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     const scrollX = container.scrollLeft;
     
     // Calculate the total X position (viewport position + scroll offset)
-    const totalX = mouseXInViewport + scrollX;
+    // Account for device pixel ratio for proper scaling on high-DPI displays
+    const totalX = (mouseXInViewport + scrollX) * devicePixelRatio;
     
-    // Since canvas width = CSS width (no scaling), convert directly to time
+    // Convert to time
     const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
     // Update playhead immediately
@@ -160,6 +164,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       // Get canvas bounding rect
       const rect = canvas.getBoundingClientRect();
       
+      // Get the device pixel ratio (accounts for high-DPI displays)
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      
       // Calculate mouse position relative to the visible part of the canvas
       const mouseXInViewport = moveEvent.clientX - rect.left;
       
@@ -167,9 +174,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       const scrollX = container.scrollLeft;
       
       // Calculate the total X position (viewport position + scroll offset)
-      const totalX = mouseXInViewport + scrollX;
+      // Account for device pixel ratio for proper scaling on high-DPI displays
+      const totalX = (mouseXInViewport + scrollX) * devicePixelRatio;
       
-      // Since canvas width = CSS width (no scaling), convert directly to time
+      // Convert to time
       const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
       
       // Always update during drag to follow cursor
