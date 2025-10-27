@@ -1,0 +1,148 @@
+.export-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.export-dialog {
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 24px;
+  width: 500px;
+  max-width: 90vw;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.export-dialog h2 {
+  margin: 0 0 20px 0;
+  color: #fff;
+  font-size: 20px;
+}
+
+.export-info {
+  margin-bottom: 20px;
+}
+
+.export-info p {
+  color: #999;
+  margin: 4px 0;
+}
+
+.export-path {
+  margin-bottom: 20px;
+}
+
+.export-path label {
+  display: block;
+  color: #ddd;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.path-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.path-input-group input {
+  flex: 1;
+  padding: 8px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.path-input-group input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.path-input-group button {
+  padding: 8px 16px;
+  background: #4a9eff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.path-input-group button:hover:not(:disabled) {
+  background: #5baaff;
+}
+
+.path-input-group button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.export-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.export-actions button:first-child {
+  background: #444;
+  color: #fff;
+}
+
+.export-actions button:first-child:hover:not(:disabled) {
+  background: #555;
+}
+
+.export-actions button:last-child {
+  background: #4a9eff;
+  color: #fff;
+}
+
+.export-actions button:last-child:hover:not(:disabled) {
+  background: #5baaff;
+}
+
+.export-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.export-progress {
+  margin-top: 20px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #4a9eff;
+  transition: width 0.3s ease;
+}
+
+.export-progress p {
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+}
+

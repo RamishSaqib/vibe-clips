@@ -1,9 +1,50 @@
+import { useState } from 'react';
 import { Import } from './features/import';
 import { Timeline } from './features/timeline';
 import { VideoPlayer } from './features/preview';
-import { VideoProvider } from './contexts/VideoContext';
-import { TimelineProvider } from './contexts/TimelineContext';
+import { ExportDialog } from './features/export';
+import { VideoProvider, useVideos } from './contexts/VideoContext';
+import { TimelineProvider, useTimeline } from './contexts/TimelineContext';
 import './App.css'
+
+function ExportButton() {
+  const { timelineState } = useTimeline();
+  const { videos } = useVideos();
+  const [showDialog, setShowDialog] = useState(false);
+
+  const handleExport = () => {
+    setShowDialog(true);
+  };
+
+  const handleClose = () => {
+    setShowDialog(false);
+  };
+
+  const handleExportStart = () => {
+    // Could show a global loading state here
+  };
+
+  return (
+    <>
+      <button 
+        onClick={handleExport}
+        className="export-button"
+        disabled={timelineState.clips.length === 0}
+      >
+        Export Video
+      </button>
+
+      {showDialog && (
+        <ExportDialog
+          clips={timelineState.clips}
+          videos={videos}
+          onClose={handleClose}
+          onExportStart={handleExportStart}
+        />
+      )}
+    </>
+  );
+}
 
 function App() {
   return (
@@ -30,7 +71,7 @@ function App() {
 
         <div className="placeholder-section export-section">
           <h2>Export</h2>
-          <p>Export settings will appear here</p>
+          <ExportButton />
         </div>
       </main>
     </div>
