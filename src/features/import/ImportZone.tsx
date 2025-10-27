@@ -11,12 +11,16 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
 
   // Listen for Tauri file-drop events
   useEffect(() => {
+    console.log('ImportZone: Setting up Tauri file-drop listener');
+    
     const setupTauriFileDrop = async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
+        console.log('ImportZone: Successfully imported listen function');
         
         // Listen for file-drop event from Tauri backend
         await listen('file-drop', (event) => {
+          console.log('ImportZone: Successfully registered file-drop listener');
           console.log('Frontend: Received file-drop event');
           console.log('Frontend: event.payload =', event.payload);
           
@@ -55,7 +59,9 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
             });
           }
         });
+        console.log('ImportZone: Tauri file-drop setup complete');
       } catch (error) {
+        console.error('ImportZone: Error setting up Tauri file-drop:', error);
       }
     };
     
