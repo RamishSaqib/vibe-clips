@@ -135,25 +135,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Get canvas bounding rect
     const rect = canvas.getBoundingClientRect();
     
+    // Calculate the scale factor between canvas pixels and CSS pixels
+    const scaleX = canvas.width / rect.width;
+    
     // Calculate mouse position relative to the visible part of the canvas
     const mouseXInViewport = e.clientX - rect.left;
     
-    // Get the scroll position
+    // Get the scroll position (in CSS pixels)
     const scrollX = container.scrollLeft;
     
-    // The actual position in the full canvas (accounting for scroll)
-    // Since we're setting style.width = canvas.width, there's a 1:1 relationship
-    const actualCanvasX = mouseXInViewport + scrollX;
-    
-    // Debug logging
-    console.log('MouseDown:', {
-      mouseXInViewport,
-      scrollX,
-      actualCanvasX,
-      canvasWidth: canvas.width,
-      rectWidth: rect.width,
-      zoom: state.zoom
-    });
+    // Convert everything to canvas pixels and combine
+    const actualCanvasX = (mouseXInViewport + scrollX) * scaleX;
     
     // Convert canvas pixels to time
     const newTime = actualCanvasX / (PIXELS_PER_SECOND * state.zoom);
@@ -171,23 +163,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       // Get canvas bounding rect
       const rect = canvas.getBoundingClientRect();
       
+      // Calculate the scale factor between canvas pixels and CSS pixels
+      const scaleX = canvas.width / rect.width;
+      
       // Calculate mouse position relative to the visible part of the canvas
       const mouseXInViewport = moveEvent.clientX - rect.left;
       
-      // Get the scroll position
+      // Get the scroll position (in CSS pixels)
       const scrollX = container.scrollLeft;
       
-      // The actual position in the full canvas (accounting for scroll)
-      const actualCanvasX = mouseXInViewport + scrollX;
-      
-      // Debug logging
-      console.log('MouseMove:', {
-        mouseXInViewport,
-        scrollX,
-        actualCanvasX,
-        canvasWidth: canvas.width,
-        rectWidth: rect.width
-      });
+      // Convert everything to canvas pixels and combine
+      const actualCanvasX = (mouseXInViewport + scrollX) * scaleX;
       
       // Convert canvas pixels to time
       const newTime = actualCanvasX / (PIXELS_PER_SECOND * state.zoom);
