@@ -156,8 +156,8 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-        <h3>Drop video files here</h3>
-        <p>or click to browse</p>
+        <h3>Click to import video files</h3>
+        <p>Browse for MP4 or MOV files</p>
         <span className="file-types">Supports: MP4, MOV</span>
       </div>
     </div>
