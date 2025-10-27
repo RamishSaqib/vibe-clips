@@ -32,7 +32,8 @@ pub fn run() {
       // Listen for file-drop-hover
       app.handle().listen("tauri://file-drop-hover", move |event| {
         println!("Rust: File drag over window");
-        if let Ok(paths) = serde_json::from_value::<Vec<String>>(event.payload()) {
+        let payload_str = event.payload() as &str;
+        if let Ok(paths) = serde_json::from_str::<Vec<String>>(payload_str) {
           println!("Rust: Hover payload = {:?}", paths);
         }
       });
