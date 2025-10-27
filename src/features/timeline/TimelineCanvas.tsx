@@ -117,22 +117,20 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const scrollX = containerRef.current?.scrollLeft || 0;
-
-    // Check if clicking on playhead handle
-    const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
-    const playheadRadius = 5;
+    const clickX = e.clientX - rect.left;
+    console.log('Click at:', clickX);
     
-    if (Math.abs(x + scrollX - playheadX) < playheadRadius + 3) {
-      setIsDraggingPlayhead(true);
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    } else {
-      // Click anywhere on timeline to set playhead position
-      const newTime = (x + scrollX) / (PIXELS_PER_SECOND * state.zoom);
-      onPlayheadDrag(Math.max(0, newTime));
-    }
+    // Always start dragging
+    setIsDraggingPlayhead(true);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    // Update playhead immediately
+    const scrollX = containerRef.current?.scrollLeft || 0;
+    const totalX = clickX + scrollX;
+    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
+    console.log('Setting time to:', newTime, 'from clickX:', clickX, 'scrollX:', scrollX);
+    onPlayheadDrag(Math.max(0, newTime));
   };
 
   const handleMouseMove = (e: MouseEvent) => {
@@ -142,9 +140,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const mouseX = e.clientX - rect.left;
     const scrollX = containerRef.current?.scrollLeft || 0;
-    const newTime = (x + scrollX) / (PIXELS_PER_SECOND * state.zoom);
+    const totalX = mouseX + scrollX;
+    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
     onPlayheadDrag(Math.max(0, newTime));
   };
