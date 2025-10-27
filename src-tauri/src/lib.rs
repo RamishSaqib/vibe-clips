@@ -1,5 +1,8 @@
 use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
+use std::process::Command;
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
@@ -18,20 +21,55 @@ async fn export_video(
         return Err("No clips to export".to_string());
     }
 
-    // For MVP, we'll use a simple concatenation approach
-    // This is a simplified version - full implementation would use FFmpeg's concat filter
-    
     println!("Exporting {} clips to {}", clips.len(), output_path);
     
-    // TODO: Implement actual FFmpeg export
-    // This would require:
-    // 1. Install or bundle FFmpeg
-    // 2. Build FFmpeg command with trim points
-    // 3. Execute FFmpeg process
-    // 4. Return progress updates via events
+    // Create a temporary concat file for FFmpeg
+    let concat_file = format!("{}.concat.txt", output_path);
+    let mut concat_content = String::new();
     
-    // For now, return success (placeholder)
-    Ok(format!("Video exported to {}", output_path))
+    // Sort clips by start_time to maintain order
+    let mut sorted_clips = clips.clone();
+    sorted_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
+    
+    for clip in &sorted_clips {
+        // Format: file '/path/to/file'
+        // inpoint and outpoint are the trim boundaries
+        concat_content.push_str(&format!(
+            "file '{}'\ninpoint {:.6}\noutpoint {:.6}\n",
+            clip.file_path.replace("\\", "/"),
+            clip.trim_start,
+            clip.trim_start + clip.duration
+        ));
+    }
+    
+    // Write concat file
+    fs::write(&concat_file, concat_content)
+        .map_err(|e| format!("Failed to write concat file: {}", e))?;
+    
+    // Build FFmpeg command
+    let ffmpeg_cmd = Command::new("ffmpeg")
+        .arg("-f")
+        .arg("concat")
+        .arg("-safe")
+        .arg("0")
+        .arg("-i")
+        .arg(&concat_file)
+        .arg("-c")
+        .arg("copy")
+        .arg("-y")
+        .arg(&output_path)
+        .output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
+    
+    // Clean up concat file
+    let _ = fs::remove_file(&concat_file);
+    
+    if ffmpeg_cmd.status.success() {
+        Ok(format!("Video exported successfully to {}", output_path))
+    } else {
+        let error = String::from_utf8_lossy(&ffmpeg_cmd.stderr);
+        Err(format!("FFmpeg export failed: {}", error))
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
