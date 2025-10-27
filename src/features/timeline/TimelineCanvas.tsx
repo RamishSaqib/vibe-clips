@@ -135,20 +135,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
     // Get canvas bounding rect
     const rect = canvas.getBoundingClientRect();
     
-    // Calculate the scale factor between canvas pixels and CSS pixels
-    const scaleX = canvas.width / rect.width;
-    
     // Calculate mouse position relative to the visible part of the canvas
     const mouseXInViewport = e.clientX - rect.left;
     
     // Get the scroll position (in CSS pixels)
     const scrollX = container.scrollLeft;
     
-    // Convert everything to canvas pixels and combine
-    const actualCanvasX = (mouseXInViewport + scrollX) * scaleX;
+    // Calculate the total X position (viewport position + scroll offset)
+    const totalX = mouseXInViewport + scrollX;
     
-    // Convert canvas pixels to time
-    const newTime = actualCanvasX / (PIXELS_PER_SECOND * state.zoom);
+    // Since canvas width = CSS width (no scaling), convert directly to time
+    const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
     
     // Update playhead immediately
     onPlayheadDrag(Math.max(0, newTime));
@@ -163,20 +160,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped }
       // Get canvas bounding rect
       const rect = canvas.getBoundingClientRect();
       
-      // Calculate the scale factor between canvas pixels and CSS pixels
-      const scaleX = canvas.width / rect.width;
-      
       // Calculate mouse position relative to the visible part of the canvas
       const mouseXInViewport = moveEvent.clientX - rect.left;
       
       // Get the scroll position (in CSS pixels)
       const scrollX = container.scrollLeft;
       
-      // Convert everything to canvas pixels and combine
-      const actualCanvasX = (mouseXInViewport + scrollX) * scaleX;
+      // Calculate the total X position (viewport position + scroll offset)
+      const totalX = mouseXInViewport + scrollX;
       
-      // Convert canvas pixels to time
-      const newTime = actualCanvasX / (PIXELS_PER_SECOND * state.zoom);
+      // Since canvas width = CSS width (no scaling), convert directly to time
+      const newTime = totalX / (PIXELS_PER_SECOND * state.zoom);
       
       // Always update during drag to follow cursor
       onPlayheadDrag(Math.max(0, newTime));
