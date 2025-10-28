@@ -89,7 +89,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
             outputPath,
           }),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Export timeout after 30 seconds')), 30000)
+            setTimeout(() => reject(new Error('Export timeout after 120 seconds')), 120000)
           )
         ]);
       } catch (invokeError) {
