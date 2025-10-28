@@ -504,8 +504,28 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           throw new Error('Combined recording data incomplete');
         }
 
-        // Wait for webcam conversion to complete (in case it's still processing)
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait for both files to be ready (webcam conversion + screen finalization)
+        // Poll for file existence with timeout
+        const waitForFile = async (filePath: string, maxWaitMs: number = 5000) => {
+          const startTime = Date.now();
+          while (Date.now() - startTime < maxWaitMs) {
+            try {
+              const size = await invoke<number>('get_file_size', { filePath });
+              if (size > 0) {
+                return true;
+              }
+            } catch (e) {
+              // File doesn't exist yet, wait and retry
+            }
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+          throw new Error(`File not ready: ${filePath}`);
+        };
+
+        console.log('Waiting for screen recording:', screenPath);
+        await waitForFile(screenPath);
+        console.log('Waiting for webcam recording:', webcamPath);
+        await waitForFile(webcamPath);
 
         // Save screen-only if requested
         if (options.saveScreen) {
@@ -563,6 +583,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
         // Create composite PiP video if requested
         if (options.saveComposite) {
+          console.log('Creating composite:', { screenPath, webcamPath, pipConfig, outputPath });
           await invoke('composite_pip_video', {
             screenPath,
             webcamPath,
