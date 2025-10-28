@@ -11,6 +11,12 @@ struct ClipData {
 }
 
 #[tauri::command]
+fn test_export() -> Result<String, String> {
+    println!("\n\nTEST COMMAND CALLED\n\n");
+    Ok("Test successful".to_string())
+}
+
+#[tauri::command]
 async fn export_video(
     clips: Vec<ClipData>,
     output_path: String,
@@ -244,7 +250,7 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![export_video])
+    .invoke_handler(tauri::generate_handler![test_export, export_video])
     .setup(|app| {
       let app_handle = app.handle().clone();
       
