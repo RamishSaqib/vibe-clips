@@ -2,6 +2,8 @@ use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 
+mod screen_capture;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
     file_path: String,
@@ -19,6 +21,7 @@ fn test_export() -> Result<String, String> {
 #[tauri::command]
 fn save_temp_video(data_url: String) -> Result<String, String> {
     use std::io::Write;
+    use base64::{Engine as _, engine::general_purpose};
     
     // Extract base64 data from data URL
     if !data_url.starts_with("data:") {
@@ -29,7 +32,7 @@ fn save_temp_video(data_url: String) -> Result<String, String> {
         .ok_or("Invalid data URL format")?;
     
     // Decode base64
-    let bytes = base64::decode(base64_data)
+    let bytes = general_purpose::STANDARD.decode(base64_data)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
     
     // Create temp file
@@ -43,6 +46,62 @@ fn save_temp_video(data_url: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     
     Ok(video_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn list_screen_sources() -> Result<Vec<screen_capture::ScreenSource>, String> {
+    screen_capture::list_screen_sources()
+}
+
+#[tauri::command]
+fn start_screen_recording(source_id: String, output_path: String) -> Result<String, String> {
+    screen_capture::start_screen_recording(source_id, output_path)
+}
+
+#[tauri::command]
+fn stop_screen_recording() -> Result<String, String> {
+    screen_capture::stop_screen_recording()
+}
+
+#[tauri::command]
+fn get_recording_status() -> Result<bool, String> {
+    screen_capture::get_recording_status()
+}
+
+#[tauri::command]
+async fn capture_screen_ffmpeg(output_path: String, duration_secs: Option<u64>) -> Result<String, String> {
+    // Run in blocking task since FFmpeg is blocking
+    tokio::task::spawn_blocking(move || {
+        screen_capture::capture_screen_with_ffmpeg(output_path, duration_secs)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+fn mux_video_audio(video_path: String, audio_path: String, output_path: String) -> Result<String, String> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+    cmd.arg("-i").arg(&video_path);
+    cmd.arg("-i").arg(&audio_path);
+    cmd.arg("-c:v").arg("copy");
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("error");
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+    
+    if output.status.success() {
+        Ok(output_path)
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("FFmpeg mux error: {}", error))
+    }
 }
 
 #[tauri::command]
@@ -254,7 +313,17 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![test_export, save_temp_video, export_video])
+    .invoke_handler(tauri::generate_handler![
+        test_export, 
+        save_temp_video, 
+        export_video,
+        list_screen_sources,
+        start_screen_recording,
+        stop_screen_recording,
+        get_recording_status,
+        capture_screen_ffmpeg,
+        mux_video_audio
+    ])
     .setup(|app| {
       let app_handle = app.handle().clone();
       

@@ -3,8 +3,10 @@ import { Import } from './features/import';
 import { Timeline } from './features/timeline';
 import { VideoPlayer } from './features/preview';
 import { ExportDialog } from './features/export';
+import { RecordingPanel } from './features/recording';
 import { VideoProvider, useVideos } from './contexts/VideoContext';
 import { TimelineProvider, useTimeline } from './contexts/TimelineContext';
+import { RecordingProvider } from './contexts/RecordingContext';
 import './App.css'
 
 function ExportButton() {
@@ -50,6 +52,7 @@ function App() {
   return (
     <VideoProvider>
     <TimelineProvider>
+    <RecordingProvider>
     <div className="app">
       <header className="app-header">
         <h1>Welcome to VibeClips</h1>
@@ -59,6 +62,10 @@ function App() {
       <main className="app-main">
         <div className="placeholder-section import-section">
           <Import />
+        </div>
+
+        <div className="recording-section">
+          <RecordingPanel />
         </div>
 
         <div className="timeline-section-wrapper">
@@ -75,6 +82,7 @@ function App() {
         </div>
       </main>
     </div>
+    </RecordingProvider>
     </TimelineProvider>
     </VideoProvider>
   )

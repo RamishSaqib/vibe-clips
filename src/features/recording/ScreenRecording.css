@@ -1,0 +1,195 @@
+.screen-recording {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.screen-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.screen-selector-label {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.screen-sources {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.screen-source {
+  background: #2a2a2a;
+  border: 2px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 150px;
+}
+
+.screen-source:hover {
+  border-color: #4a9eff;
+}
+
+.screen-source.selected {
+  border-color: #4a9eff;
+  background: #2a3a4a;
+}
+
+.screen-source.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.screen-source-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e0e0e0;
+  margin-bottom: 4px;
+}
+
+.screen-source-details {
+  font-size: 11px;
+  color: #888;
+}
+
+.recording-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.recording-controls-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.record-button,
+.stop-button,
+.save-button,
+.discard-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.record-button {
+  background: #d63031;
+  color: white;
+}
+
+.record-button:hover:not(:disabled) {
+  background: #e74c3c;
+}
+
+.record-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stop-button {
+  background: #f39c12;
+  color: white;
+}
+
+.stop-button:hover:not(:disabled) {
+  background: #f1c40f;
+}
+
+.save-button {
+  background: #27ae60;
+  color: white;
+}
+
+.save-button:hover:not(:disabled) {
+  background: #2ecc71;
+}
+
+.discard-button {
+  background: #555;
+  color: white;
+}
+
+.discard-button:hover:not(:disabled) {
+  background: #666;
+}
+
+.recording-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e0e0e0;
+  font-size: 13px;
+}
+
+.recording-indicator {
+  width: 12px;
+  height: 12px;
+  background: #d63031;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.recording-timer {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.error-message {
+  background: #d63031;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.loading-message {
+  color: #4a9eff;
+  font-size: 13px;
+}
+
+.save-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+}
+
+.save-options-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.save-option-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.save-option-checkbox input {
+  cursor: pointer;
+}
+
