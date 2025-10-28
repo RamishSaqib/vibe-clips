@@ -138,13 +138,10 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped()); // Keep stderr for debugging
     
-    println!("Starting FFmpeg with output: {}", output_path);
-    
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed and in PATH.", e))?;
     
     let pid = child.id();
-    println!("FFmpeg started with PID: {}", pid);
     
     // Store the child process
     let mut ffmpeg_child = FFMPEG_CHILD.lock().unwrap();
@@ -154,45 +151,6 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.output_path = Some(output_path.clone());
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
-    
-    // Small delay to check if process is still alive
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    
-    // Check if the process is still running
-    let mut ffmpeg_child_check = FFMPEG_CHILD.lock().unwrap();
-    if let Some(ref mut child) = *ffmpeg_child_check {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                // Process already exited - this is bad
-                let stderr = child.stderr.take();
-                let error_msg = if let Some(mut stderr) = stderr {
-                    use std::io::Read;
-                    let mut buf = String::new();
-                    stderr.read_to_string(&mut buf).ok();
-                    buf
-                } else {
-                    "Unknown error".to_string()
-                };
-                
-                // Clean up session
-                drop(ffmpeg_child_check);
-                let mut session = RECORDING_SESSION.lock().unwrap();
-                session.is_recording = false;
-                session.output_path = None;
-                session.start_time = None;
-                session.ffmpeg_process = None;
-                
-                return Err(format!("FFmpeg exited immediately with status: {:?}. Error: {}", status.code(), error_msg));
-            }
-            Ok(None) => {
-                // Process is still running - good!
-                println!("FFmpeg is running successfully");
-            }
-            Err(e) => {
-                println!("Warning: Could not check FFmpeg status: {}", e);
-            }
-        }
-    }
     
     Ok(format!("Recording started (PID: {})", pid))
 }
