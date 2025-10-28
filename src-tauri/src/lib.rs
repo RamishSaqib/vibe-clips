@@ -21,8 +21,9 @@ async fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
-    // Write to log FIRST THING to verify function is called
-    let _ = std::fs::write("export_debug.log", "=== FUNCTION CALLED ===\n");
+    // Write to log FIRST THING to verify function is called - try multiple locations
+    let _ = std::fs::write("C:/export_debug.log", "=== FUNCTION CALLED ===\n");
+    let _ = std::fs::write("./export_debug.log", "=== FUNCTION CALLED ===\n");
     
     // Log to file to avoid terminal spam
     let mut log = format!("Clips count: {}\nOutput path: {}\n", 
@@ -30,7 +31,7 @@ async fn export_video(
     
     if clips.is_empty() {
         log.push_str("ERROR: No clips\n");
-        let _ = std::fs::write("export_debug.log", &log);
+        let _ = std::fs::write("C:/export_debug.log", &log);
         return Err("No clips to export".to_string());
     }
     
@@ -41,7 +42,7 @@ async fn export_video(
     if !outputPath.ends_with(".mp4") && !outputPath.ends_with(".mov") {
         let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", outputPath);
         log.push_str(&format!("ERROR: {}\n", error_msg));
-        let _ = std::fs::write("export_debug.log", &log);
+        let _ = std::fs::write("C:/export_debug.log", &log);
         return Err(error_msg);
     }
     
@@ -52,7 +53,7 @@ async fn export_video(
                  i, clip.file_path, clip.trim_start, clip.duration));
     }
     
-    let _ = std::fs::write("export_debug.log", &log);
+    let _ = std::fs::write("C:/export_debug.log", &log);
     
     // Sort clips by start_time to maintain order
     let mut sorted_clips = clips.clone();
@@ -107,13 +108,13 @@ async fn export_video(
         
         // Check if output file was created
         if std::path::Path::new(&outputPath).exists() {
-            let _ = std::fs::write("export_debug.log", "=== EXPORT SUCCESS ===\n");
+            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
             return Ok(format!("Video exported successfully to {}", outputPath));
         } else if status.success() {
-            let _ = std::fs::write("export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
+            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
             return Err("FFmpeg completed but output file was not created".to_string());
         } else {
-            let _ = std::fs::write("export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+            let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
             return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
         }
     }
@@ -209,10 +210,10 @@ async fn export_video(
     let _ = std::fs::remove_file(&concat_file);
     
     if status.success() {
-        let _ = std::fs::write("export_debug.log", "=== EXPORT SUCCESS ===\n");
+        let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
         Ok(format!("Video exported successfully to {}", outputPath))
     } else {
-        let _ = std::fs::write("export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+        let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
         Err(format!("Concatenation failed with exit code: {:?}", status.code()))
     }
 }
