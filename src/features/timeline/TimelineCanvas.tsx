@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TimelineState } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
 import './TimelineCanvas.css';
@@ -13,7 +13,9 @@ interface TimelineCanvasProps {
 }
 
 const PIXELS_PER_SECOND = 30;
+const RULER_HEIGHT = 30;
 const TRACK_HEIGHT = 60;
+const TOTAL_HEIGHT = RULER_HEIGHT + TRACK_HEIGHT;
 
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, onClipSelect, onClipTrim }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -26,6 +28,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const initialStateRef = useRef<{ clip: any; video: VideoFile } | null>(null);
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
   const didMoveRef = useRef(false);
+  const [hoveredHandle, setHoveredHandle] = useState<{ clipId: string; handle: 'left' | 'right' } | null>(null);
 
   // Draw the timeline
   useEffect(() => {
@@ -50,11 +53,23 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
+    // Draw ruler background (separate section)
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(0, 0, width, RULER_HEIGHT);
+    
+    // Draw ruler bottom border
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, RULER_HEIGHT);
+    ctx.lineTo(width, RULER_HEIGHT);
+    ctx.stroke();
+
     // Draw timeline track background
     ctx.fillStyle = '#252525';
-    ctx.fillRect(0, 0, width, TRACK_HEIGHT);
+    ctx.fillRect(0, RULER_HEIGHT, width, TRACK_HEIGHT);
 
-    // Draw time ruler
+    // Draw time ruler markers and labels
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     
@@ -64,15 +79,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     for (let time = startTime; time <= maxDuration; time += timeInterval) {
       const x = time * PIXELS_PER_SECOND * state.zoom;
       
+      // Draw tick marks in ruler section
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, 20);
+      ctx.moveTo(x, RULER_HEIGHT - 12);
+      ctx.lineTo(x, RULER_HEIGHT);
       ctx.stroke();
       
+      // Draw time labels in ruler section (higher up)
       ctx.fillStyle = '#999';
       ctx.font = '11px sans-serif';
-      ctx.textBaseline = 'top'; // Align text from the top
-      ctx.fillText(formatTime(time), x + 4, 2); // Move much higher (y=2 instead of y=12)
+      ctx.textBaseline = 'top';
+      ctx.fillText(formatTime(time), x + 4, 4);
       ctx.fillStyle = '#555';
     }
 
@@ -84,29 +101,70 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom;
       const clipWidth = clip.duration * PIXELS_PER_SECOND * state.zoom;
       const isSelected = state.selectedClipId === clip.id;
+      const clipY = RULER_HEIGHT + 5;
+      const clipHeight = TRACK_HEIGHT - 10;
 
       // Check if there are trimmed portions
       const hasLeftTrim = clip.trimStart > 0;
       const hasRightTrim = clip.trimEnd < video.duration;
 
-      // Draw trimmed regions (darker)
+      // Draw trimmed regions with hatching pattern for better distinction
       if (hasLeftTrim) {
         const leftTrimWidth = clip.trimStart * PIXELS_PER_SECOND * state.zoom;
-        ctx.fillStyle = isSelected ? '#2d5a9e' : '#2d2d2d';
-        ctx.fillRect(clipX - leftTrimWidth, 5, leftTrimWidth, TRACK_HEIGHT - 10);
+        const leftTrimX = clipX - leftTrimWidth;
+        
+        // Dark background for trimmed area
+        ctx.fillStyle = isSelected ? '#1a3a6e' : '#1a1a1a';
+        ctx.fillRect(leftTrimX, clipY, leftTrimWidth, clipHeight);
+        
+        // Add diagonal hatching pattern with clipping
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(leftTrimX, clipY, leftTrimWidth, clipHeight);
+        ctx.clip();
+        
+        ctx.strokeStyle = isSelected ? '#2d5a9e' : '#2a2a2a';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < leftTrimWidth + clipHeight; i += 8) {
+          ctx.beginPath();
+          ctx.moveTo(leftTrimX + i, clipY);
+          ctx.lineTo(leftTrimX + i - clipHeight, clipY + clipHeight);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
       }
 
       if (hasRightTrim) {
         const rightTrimStart = clipX + clipWidth;
         const rightTrimDuration = video.duration - clip.trimEnd;
         const rightTrimWidth = rightTrimDuration * PIXELS_PER_SECOND * state.zoom;
-        ctx.fillStyle = isSelected ? '#2d5a9e' : '#2d2d2d';
-        ctx.fillRect(rightTrimStart, 5, rightTrimWidth, TRACK_HEIGHT - 10);
+        
+        // Dark background for trimmed area
+        ctx.fillStyle = isSelected ? '#1a3a6e' : '#1a1a1a';
+        ctx.fillRect(rightTrimStart, clipY, rightTrimWidth, clipHeight);
+        
+        // Add diagonal hatching pattern with clipping
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(rightTrimStart, clipY, rightTrimWidth, clipHeight);
+        ctx.clip();
+        
+        ctx.strokeStyle = isSelected ? '#2d5a9e' : '#2a2a2a';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < rightTrimWidth + clipHeight; i += 8) {
+          ctx.beginPath();
+          ctx.moveTo(rightTrimStart + i, clipY);
+          ctx.lineTo(rightTrimStart + i - clipHeight, clipY + clipHeight);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
       }
 
-      // Draw active clip region
+      // Draw active clip region (brighter)
       ctx.fillStyle = isSelected ? '#4a9eff' : '#3a3a3a';
-      ctx.fillRect(clipX, 5, clipWidth, TRACK_HEIGHT - 10);
+      ctx.fillRect(clipX, clipY, clipWidth, clipHeight);
 
       // Clip border
       ctx.strokeStyle = isSelected ? '#6bb5ff' : '#555';
@@ -116,25 +174,82 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const fullX = fullClipStartTime * PIXELS_PER_SECOND * state.zoom;
       const fullWidth = video.duration * PIXELS_PER_SECOND * state.zoom;
       
-      ctx.strokeRect(fullX, 5, fullWidth, TRACK_HEIGHT - 10);
+      ctx.strokeRect(fullX, clipY, fullWidth, clipHeight);
 
       // Draw trim handles for selected clips
       if (isSelected) {
-        const handleWidth = 10;
-        const handleHeight = TRACK_HEIGHT - 10;
+        const handleWidth = 14; // Increased from 10
+        const isLeftHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'left';
+        const isRightHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'right';
         
         // Left trim handle (at the start of visible clip)
-        ctx.fillStyle = '#ffd700';
-        ctx.fillRect(clipX - handleWidth/2, 5, handleWidth, handleHeight);
+        const leftHandleX = clipX - handleWidth/2;
+        
+        // Draw handle shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(leftHandleX + 2, clipY + 2, handleWidth, clipHeight);
+        
+        // Draw handle with gradient effect
+        const leftGradient = ctx.createLinearGradient(leftHandleX, 0, leftHandleX + handleWidth, 0);
+        if (isLeftHovered) {
+          leftGradient.addColorStop(0, '#ffe55c');
+          leftGradient.addColorStop(1, '#ffd700');
+        } else {
+          leftGradient.addColorStop(0, '#ffd700');
+          leftGradient.addColorStop(1, '#ffb700');
+        }
+        ctx.fillStyle = leftGradient;
+        ctx.fillRect(leftHandleX, clipY, handleWidth, clipHeight);
+        
+        // Handle border with rounded corners effect
+        ctx.strokeStyle = isLeftHovered ? '#fff' : '#ffed4e';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(leftHandleX, clipY, handleWidth, clipHeight);
+        
+        // Add grip lines for better affordance
+        ctx.strokeStyle = isLeftHovered ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.3)';
+        ctx.lineWidth = 1;
+        const gripSpacing = clipHeight / 4;
+        for (let i = 1; i < 4; i++) {
+          ctx.beginPath();
+          ctx.moveTo(leftHandleX + 3, clipY + gripSpacing * i);
+          ctx.lineTo(leftHandleX + handleWidth - 3, clipY + gripSpacing * i);
+          ctx.stroke();
+        }
         
         // Right trim handle (at the end of visible clip)
-        ctx.fillRect(clipX + clipWidth - handleWidth/2, 5, handleWidth, handleHeight);
+        const rightHandleX = clipX + clipWidth - handleWidth/2;
         
-        // Handle borders
-        ctx.strokeStyle = '#ffed4e';
+        // Draw handle shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(rightHandleX + 2, clipY + 2, handleWidth, clipHeight);
+        
+        // Draw handle with gradient effect
+        const rightGradient = ctx.createLinearGradient(rightHandleX, 0, rightHandleX + handleWidth, 0);
+        if (isRightHovered) {
+          rightGradient.addColorStop(0, '#ffe55c');
+          rightGradient.addColorStop(1, '#ffd700');
+        } else {
+          rightGradient.addColorStop(0, '#ffd700');
+          rightGradient.addColorStop(1, '#ffb700');
+        }
+        ctx.fillStyle = rightGradient;
+        ctx.fillRect(rightHandleX, clipY, handleWidth, clipHeight);
+        
+        // Handle border
+        ctx.strokeStyle = isRightHovered ? '#fff' : '#ffed4e';
         ctx.lineWidth = 2;
-        ctx.strokeRect(clipX - handleWidth/2, 5, handleWidth, handleHeight);
-        ctx.strokeRect(clipX + clipWidth - handleWidth/2, 5, handleWidth, handleHeight);
+        ctx.strokeRect(rightHandleX, clipY, handleWidth, clipHeight);
+        
+        // Add grip lines
+        ctx.strokeStyle = isRightHovered ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.3)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) {
+          ctx.beginPath();
+          ctx.moveTo(rightHandleX + 3, clipY + gripSpacing * i);
+          ctx.lineTo(rightHandleX + handleWidth - 3, clipY + gripSpacing * i);
+          ctx.stroke();
+        }
       }
 
       // Clip label
@@ -145,34 +260,81 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
         const text = video.filename.length > maxWidth / 6 
           ? video.filename.substring(0, maxWidth / 6) + '...' 
           : video.filename;
-        ctx.fillText(text, clipX + 8, 25);
+        ctx.fillText(text, clipX + 8, clipY + 20);
         
         ctx.fillStyle = '#999';
         ctx.font = '9px sans-serif';
-        ctx.fillText(formatTime(clip.duration), clipX + 8, 40);
+        ctx.fillText(formatTime(clip.duration), clipX + 8, clipY + 35);
       }
     });
 
     // Draw playhead
     if (state.clips.length > 0) {
       const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
+      
+      // Draw playhead line from ruler through track
       ctx.strokeStyle = '#ff4a4a';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(playheadX, 0);
-      ctx.lineTo(playheadX, TRACK_HEIGHT);
+      ctx.lineTo(playheadX, TOTAL_HEIGHT);
       ctx.stroke();
 
+      // Draw playhead circle in the middle of track
       ctx.fillStyle = '#ff4a4a';
       ctx.beginPath();
-      ctx.arc(playheadX, TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
+      ctx.arc(playheadX, RULER_HEIGHT + TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [state, videos]);
+  }, [state, videos, hoveredHandle]);
+
+  // Handle mouse move for hover effects
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const mouseXRelativeToContainer = e.clientX - containerRect.left;
+    const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
+    const scaleX = canvas.width / container.scrollWidth;
+    const canvasX = totalCSSX * scaleX;
+    const mouseTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
+    
+    // Check if hovering over trim handles
+    let newHoveredHandle: { clipId: string; handle: 'left' | 'right' } | null = null;
+    
+    for (const clip of state.clips) {
+      if (state.selectedClipId !== clip.id) continue; // Only check selected clip
+      
+      const video = videos.find(v => v.id === clip.videoFileId);
+      if (!video) continue;
+      
+      const clipStartTime = clip.startTime;
+      const clipEndTime = clip.startTime + clip.duration;
+      const handleToleranceInTime = 10 / (PIXELS_PER_SECOND * state.zoom);
+      
+      // Check left handle
+      if (mouseTime >= clipStartTime - handleToleranceInTime && 
+          mouseTime <= clipStartTime + handleToleranceInTime) {
+        newHoveredHandle = { clipId: clip.id, handle: 'left' };
+        break;
+      }
+      
+      // Check right handle
+      if (mouseTime >= clipEndTime - handleToleranceInTime && 
+          mouseTime <= clipEndTime + handleToleranceInTime) {
+        newHoveredHandle = { clipId: clip.id, handle: 'right' };
+        break;
+      }
+    }
+    
+    setHoveredHandle(newHoveredHandle);
+  };
 
   // Handle mouse interactions
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -382,16 +544,23 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 1200);
 
   return (
-    <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%', height: TRACK_HEIGHT + 'px' }}>
+    <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%', height: TOTAL_HEIGHT + 'px' }}>
       <canvas
         ref={canvasRef}
         width={canvasWidth}
-        height={TRACK_HEIGHT}
+        height={TOTAL_HEIGHT}
         className="timeline-canvas"
         onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        style={{ display: 'block', width: canvasWidth + 'px', height: TRACK_HEIGHT + 'px', minWidth: '100%' }}
+        style={{ 
+          display: 'block', 
+          width: canvasWidth + 'px', 
+          height: TOTAL_HEIGHT + 'px', 
+          minWidth: '100%',
+          cursor: hoveredHandle ? 'ew-resize' : 'pointer'
+        }}
       />
     </div>
   );

@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { VideoFile } from '../../types/video';
+import { useVideos } from '../../contexts/VideoContext';
+import { useTimeline } from '../../contexts/TimelineContext';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import './MediaLibrary.css';
 
 interface MediaLibraryProps {
@@ -8,6 +12,9 @@ interface MediaLibraryProps {
 }
 
 export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
+  const { removeVideo } = useVideos();
+  const { removeClipsByVideoId } = useTimeline();
+  const [deleteConfirm, setDeleteConfirm] = useState<{ videoId: string; videoName: string } | null>(null);
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -18,6 +25,23 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, video: VideoFile) => {
+    e.stopPropagation();
+    setDeleteConfirm({ videoId: video.id, videoName: video.filename });
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirm) {
+      removeClipsByVideoId(deleteConfirm.videoId);
+      removeVideo(deleteConfirm.videoId);
+      setDeleteConfirm(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirm(null);
   };
 
   return (
@@ -69,10 +93,28 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
                   <span>{formatSize(video.size)}</span>
                 </div>
               </div>
+              <button 
+                className="media-delete-button"
+                onClick={(e) => handleDeleteClick(e, video)}
+                title="Delete video"
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
       )}
+      
+      <ConfirmDialog
+        isOpen={deleteConfirm !== null}
+        title="Delete Video"
+        message={`Are you sure you want to delete "${deleteConfirm?.videoName}"? This will also remove all clips using this video from the timeline.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous={true}
+      />
     </div>
   );
 }
