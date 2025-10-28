@@ -17,7 +17,7 @@ fn test_export() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn export_video(
+async fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
