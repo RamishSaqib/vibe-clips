@@ -34,12 +34,7 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "binaries/ffmpeg.exe",
-      "binaries/ffprobe.exe"
-    ],
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
+      "binaries/*"
     ],
     "icon": [
       "icons/32x32.png",
