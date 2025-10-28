@@ -304,7 +304,7 @@ Implement video export functionality using FFmpeg to render timeline composition
 
 ---
 
-## PR#7: Build & Package
+## PR#7: Build & Package ✅ COMPLETE
 
 **Branch:** `feature/pr7-build-package`
 
@@ -312,12 +312,12 @@ Implement video export functionality using FFmpeg to render timeline composition
 Create distributable desktop application for Windows and/or macOS.
 
 ### Acceptance Criteria
-- [ ] Production build completes without errors
-- [ ] App runs in production mode (not just dev)
-- [ ] Packaged installer/executable created
-- [ ] FFmpeg binary bundled or installation instructions provided
-- [ ] App icon configured
-- [ ] Basic README with installation instructions
+- [x] Production build completes without errors
+- [x] App runs in production mode (not just dev)
+- [x] Packaged installer/executable created
+- [x] FFmpeg binary bundled with installation instructions provided
+- [x] App icon configured
+- [x] Basic README with installation instructions
 
 ### Technical Implementation
 - Configure `tauri.conf.json` for production:
@@ -325,8 +325,9 @@ Create distributable desktop application for Windows and/or macOS.
   - Configure bundle settings for target platform
   - Add app icon assets
 - Bundle FFmpeg:
-  - **Option A:** Include FFmpeg binary in app resources
-  - **Option B:** Provide installation script/instructions
+  - Provided installation script/instructions in README
+  - Added FFmpeg binary discovery system (checks PATH and common locations)
+  - Created `binaries/` folder for optional bundled binaries
 - Build commands:
   - `npm run tauri build` - creates distributable
 - Test packaged app on clean machine (no dev tools)
@@ -334,7 +335,7 @@ Create distributable desktop application for Windows and/or macOS.
   - Installation instructions
   - System requirements
   - Quick start guide
-  - FFmpeg setup if needed
+  - FFmpeg setup instructions
 
 ### Dependencies
 - Requires PR#1-6 (all core features)
@@ -350,17 +351,311 @@ Create distributable desktop application for Windows and/or macOS.
 
 ---
 
+## PR#8: Screen Recording ✅ COMPLETE
+
+**Branch:** `feature/pr8-screen-recording`
+
+### Description
+Implement native screen recording functionality with system audio capture using FFmpeg and Windows WASAPI.
+
+### Acceptance Criteria
+- [x] Record screen with configurable display selection
+- [x] Capture system audio (desktop audio) using WASAPI loopback
+- [x] Save recordings as MP4 files
+- [x] Display recording indicator during capture
+- [x] Save recordings to media library
+- [x] Add recordings to timeline automatically
+
+### Technical Implementation
+- Created `/src/features/recording/` components:
+  - `RecordingPanel.tsx` - tabbed recording interface
+  - `ScreenRecording.tsx` - screen recording controls
+- Implemented Rust backend (`src-tauri/src/screen_capture.rs`):
+  - Windows: gdigrab for screen capture
+  - WASAPI loopback for system audio capture
+  - Audio/video synchronization with timing offsets
+  - FFmpeg muxing with proper sync correction
+- Screen source enumeration using Windows GDI API
+- Timer-based duration tracking
+- Audio sync fixes with adelay and apad filters
+
+### Dependencies
+- FFmpeg with gdigrab and WASAPI support
+- Windows API for display enumeration
+- Rust crates: windows, lazy_static
+
+### Testing
+- Screen recording captures video correctly
+- System audio is captured and synced
+- Recordings save to media library
+- Timeline integration works
+
+---
+
+## PR#9: Webcam Recording ✅ COMPLETE
+
+**Branch:** `feature/pr9-webcam-recording`
+
+### Description
+Add webcam recording capability with audio using browser MediaRecorder API.
+
+### Acceptance Criteria
+- [x] Enumerate available webcam devices
+- [x] Show live camera preview
+- [x] Record webcam video with microphone audio
+- [x] Support multiple resolutions (480p, 720p, 1080p)
+- [x] Mirror preview option for user comfort
+- [x] Convert WebM recordings to MP4 format
+- [x] Add recordings to media library
+
+### Technical Implementation
+- Created `WebcamRecording.tsx` component
+- Used MediaRecorder API for browser-based recording
+- Camera device enumeration via getUserMedia()
+- Live preview with mirror transform option
+- Resolution selection (480p/720p/1080p)
+- WebM to MP4 conversion using FFmpeg
+- Thumbnail generation for recordings
+
+### Dependencies
+- Browser MediaDevices API
+- MediaRecorder API
+- FFmpeg for format conversion
+
+### Testing
+- Camera preview displays correctly
+- Recording captures video and audio
+- WebM to MP4 conversion works
+- Recordings integrate with timeline
+
+---
+
+## PR#10: Combined PiP Recording ✅ COMPLETE
+
+**Branch:** `feature/pr10-combined-recording`
+
+### Description
+Implement combined screen + webcam recording with Picture-in-Picture (PiP) compositing.
+
+### Acceptance Criteria
+- [x] Record screen and webcam simultaneously
+- [x] Configure PiP position (4 corners)
+- [x] Configure PiP size (small/medium/large)
+- [x] Configurable padding from edges
+- [x] Audio options (system audio, mic audio, or both)
+- [x] FFmpeg compositing with overlay filter
+- [x] Save options (screen only, webcam only, composite, or all)
+- [x] Proper audio/video synchronization
+
+### Technical Implementation
+- Created `CombinedRecording.tsx` with comprehensive UI:
+  - Screen source selector
+  - Camera selector with live preview
+  - PiP configuration (position, size, padding)
+  - Audio options checkboxes
+  - Save options for different outputs
+- Implemented `composite_pip_video` Rust command:
+  - FFmpeg filter_complex with scale and overlay
+  - Multi-track audio mixing with amix
+  - Screen start offset calculation for A/V sync
+  - Webcam latency compensation (100ms buffer)
+  - Audio delay filters (adelay) for sync correction
+  - Audio padding (apad) for duration matching
+- Recording timing coordination:
+  - Screen starts first, webcam follows
+  - Offset calculation for synchronization
+  - Audio stream delay compensation
+
+### Dependencies
+- Screen recording (PR#8)
+- Webcam recording (PR#9)
+- FFmpeg filter_complex capabilities
+- Audio sync expertise
+
+### Testing
+- Screen and webcam record simultaneously
+- PiP overlay appears in correct position/size
+- Audio from both sources is mixed correctly
+- All save options work (screen/webcam/composite)
+- A/V sync is maintained
+
+---
+
+## PR#11: UI Improvements & Video Management ✅ COMPLETE
+
+**Branch:** `main` (direct commits)
+
+### Description
+Polish UI, improve timeline trim functionality, and add video removal capability.
+
+### Acceptance Criteria
+- [x] Improved timeline trim UI with better visual feedback
+- [x] Separate time ruler section above clips
+- [x] Enhanced trim handles (larger, gradient, grip lines)
+- [x] Hover effects on trim handles
+- [x] Diagonal hatching pattern for trimmed regions
+- [x] Video deletion from media library
+- [x] Confirmation dialog for video deletion
+- [x] Automatic clip removal when video is deleted
+- [x] Playhead repositioning when timeline is shortened
+
+### Technical Implementation
+- Enhanced `TimelineCanvas.tsx`:
+  - Added dedicated ruler section (30px)
+  - Increased handle width (14px)
+  - Added gradient and shadow effects
+  - Implemented grip lines for affordance
+  - Added hover state with cursor changes
+  - Diagonal hatching for trimmed areas
+- Created `ConfirmDialog.tsx` component:
+  - Reusable modal for confirmations
+  - Support for dangerous actions (red styling)
+- Updated `MediaLibrary.tsx`:
+  - Added delete button with hover reveal
+  - Integration with confirmation dialog
+  - Dual-path handling for data URLs and file paths
+- Updated contexts:
+  - `VideoContext`: Added `removeVideo` function
+  - `TimelineContext`: Added `removeClipsByVideoId` function
+
+### Testing
+- Timeline trim markers are visible and intuitive
+- Trim handles respond to hover
+- Video deletion works with confirmation
+- Clips are removed when video is deleted
+- Timeline adjusts correctly
+
+---
+
+## PR#12: Production Build Fixes ✅ COMPLETE
+
+**Branch:** `main` (direct commits)
+
+### Description
+Fix all issues preventing production builds from working correctly, including FFmpeg discovery, CSP configuration, and file path handling.
+
+### Acceptance Criteria
+- [x] FFmpeg console windows hidden in production
+- [x] FFmpeg binary discovery system implemented
+- [x] Bundled FFmpeg binaries support
+- [x] Content Security Policy (CSP) configured correctly
+- [x] Data URL support for imported videos
+- [x] File path support for recorded videos
+- [x] Dual-path handling in all video components
+- [x] Thumbnail generation working for all video types
+- [x] Discard button fixed in combined recording
+- [x] Audio sync issues resolved
+
+### Technical Implementation
+- Created `create_hidden_command()` helper in Rust:
+  - Uses CREATE_NO_WINDOW flag on Windows
+  - Prevents FFmpeg console windows
+- Implemented `find_ffmpeg_binary()` system:
+  - Checks bundled binaries first
+  - Falls back to system PATH
+  - Checks common installation locations
+- Updated `tauri.conf.json`:
+  - Modified CSP to allow `data:` and `asset:` URLs
+  - Added `resources: ["binaries/*"]` for bundling
+- Fixed `RecordingContext.tsx`:
+  - Proper state management in discard handlers
+  - Better error handling
+  - Explicit state resets
+- Audio sync improvements:
+  - Webcam latency buffer (100ms)
+  - Proper aresample=async=1 placement
+  - Changed to fps_mode vfr from deprecated -vsync
+- Import flow fixes:
+  - Unique ID generation with array index
+  - Data URL handling maintained for browser compatibility
+
+### Testing
+- Production build works without FFmpeg console windows
+- Imported videos display correctly
+- Recorded videos display correctly
+- Thumbnails generate for all video types
+- Audio stays synchronized
+- Discard button works properly
+
+---
+
+## PR#13: Code Refactoring & Optimization ✅ COMPLETE
+
+**Branch:** `main` (direct commits)
+
+### Description
+Major code refactoring to improve maintainability, performance, and code quality using DRY principles.
+
+### Acceptance Criteria
+- [x] Create shared utility functions
+- [x] Create shared constants file
+- [x] Extract duplicate code across components
+- [x] Optimize Timeline rendering with memoization
+- [x] Add reusable custom hooks
+- [x] Improve error handling consistency
+- [x] Reduce code duplication
+- [x] Maintain backward compatibility
+
+### Technical Implementation
+- Created `src/utils/format.ts`:
+  - `formatTime()` - MM:SS formatting
+  - `formatDuration()` - Human-readable durations
+  - `formatFileSize()` - File size formatting
+  - Eliminated 7+ duplicate implementations
+- Created `src/utils/constants.ts`:
+  - `TIMELINE_CONSTANTS` - Rendering parameters
+  - `RECORDING_RESOLUTIONS` - Resolution presets
+  - `DRAG_THROTTLE_MS` / `TRIM_THROTTLE_MS` - Frame limiters
+  - `DRAG_THRESHOLD` - Click vs drag detection
+- Created `src/hooks/useCameraPreview.ts`:
+  - Reusable camera preview logic
+  - Automatic lifecycle management
+  - Error and loading states
+- Optimized `TimelineCanvas.tsx`:
+  - Added `useMemo` for maxDuration and canvasWidth
+  - Converted handlers to `useCallback`
+  - Replaced magic numbers with constants
+  - Better performance with fewer re-renders
+- Updated 8 components to use shared utilities:
+  - All recording components
+  - Timeline components
+  - Media library
+  - Export dialog
+- Created `REFACTORING_SUMMARY.md` documentation
+
+### Statistics
+- Files created: 4 new utility/hook files
+- Files modified: 8 components refactored
+- Code reduced: ~150 lines of duplication removed
+- Performance: Improved with memoization
+- Build status: ✅ Successful compilation
+
+### Testing
+- All components compile without errors
+- No linter errors
+- Timeline performance improved
+- All features work identically
+- Backward compatible (no breaking changes)
+
+---
+
 ## Success Criteria for MVP
 
-All 7 PRs merged and tested by **Tuesday, October 28th at 10:59 PM CT**:
+All PRs completed and tested:
 
-1. ✅ Desktop app launches *(Completed)*
-2. ✅ Video import (drag & drop + file picker) *(Completed)*
-3. ✅ Timeline shows imported clips *(Completed)*
-4. ✅ Video preview plays clips *(Completed)*
-5. ✅ Trim clips with in/out points *(Completed)*
-6. ✅ Export to MP4 *(Completed)*
-7. ⏳ Packaged native app *(Pending)*
+1. ✅ Desktop app launches *(Completed - PR#1)*
+2. ✅ Video import (drag & drop + file picker) *(Completed - PR#2)*
+3. ✅ Timeline shows imported clips *(Completed - PR#3)*
+4. ✅ Video preview plays clips *(Completed - PR#4)*
+5. ✅ Trim clips with in/out points *(Completed - PR#5)*
+6. ✅ Export to MP4 *(Completed - PR#6)*
+7. ✅ Packaged native app *(Completed - PR#7)*
+8. ✅ Screen recording with system audio *(Completed - PR#8)*
+9. ✅ Webcam recording *(Completed - PR#9)*
+10. ✅ Combined PiP recording *(Completed - PR#10)*
+11. ✅ UI improvements & video management *(Completed - PR#11)*
+12. ✅ Production build fixes *(Completed - PR#12)*
+13. ✅ Code refactoring & optimization *(Completed - PR#13)*
 
 ---
 
