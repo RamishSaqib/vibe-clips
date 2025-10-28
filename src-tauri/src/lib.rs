@@ -8,9 +8,42 @@ use std::os::windows::process::CommandExt;
 mod screen_capture;
 mod audio_capture;
 
+// Helper function to find ffmpeg/ffprobe executable
+fn find_ffmpeg_binary(program: &str) -> String {
+    // First, try the program name directly (will work if in PATH)
+    if std::process::Command::new(program)
+        .arg("-version")
+        .output()
+        .is_ok()
+    {
+        return program.to_string();
+    }
+
+    // Common Windows installation locations
+    #[cfg(target_os = "windows")]
+    {
+        let common_paths = vec![
+            format!("C:\\ffmpeg\\bin\\{}.exe", program),
+            format!("C:\\Program Files\\ffmpeg\\bin\\{}.exe", program),
+            format!("{}\\ffmpeg\\bin\\{}.exe", std::env::var("LOCALAPPDATA").unwrap_or_default(), program),
+            format!("{}\\ffmpeg\\bin\\{}.exe", std::env::var("PROGRAMFILES").unwrap_or_default(), program),
+        ];
+
+        for path in common_paths {
+            if std::path::Path::new(&path).exists() {
+                return path;
+            }
+        }
+    }
+
+    // If all else fails, return the program name and let it fail with a useful error
+    program.to_string()
+}
+
 // Helper function to create a Command that won't show a console window on Windows
 fn create_hidden_command(program: &str) -> Command {
-    let mut cmd = Command::new(program);
+    let ffmpeg_path = find_ffmpeg_binary(program);
+    let mut cmd = Command::new(ffmpeg_path);
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
