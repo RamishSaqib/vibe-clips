@@ -21,10 +21,17 @@ async fn export_video(
 
     println!("=== EXPORT START ===");
     println!("Exporting {} clips to '{}'", clips.len(), output_path);
+    println!("Output path length: {}, ends with .mp4: {}, ends with .mov: {}", 
+             output_path.len(), 
+             output_path.ends_with(".mp4"), 
+             output_path.ends_with(".mov"));
     
     // Validate output path has a filename
     if !output_path.ends_with(".mp4") && !output_path.ends_with(".mov") {
-        return Err(format!("Output path must end with .mp4 or .mov, got: '{}'", output_path));
+        println!("ERROR: Output path validation failed!");
+        let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", output_path);
+        println!("Error: {}", error_msg);
+        return Err(error_msg);
     }
     
     println!("Output path validated: {}", output_path);
