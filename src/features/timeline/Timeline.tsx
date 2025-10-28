@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { TimelineClip } from '../../types/timeline';
 import { TimelineCanvas } from './TimelineCanvas';
 import { useVideos } from '../../contexts/VideoContext';
@@ -8,7 +8,7 @@ import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
-  const { timelineState, setTimelineState } = useTimeline();
+  const { timelineState, setTimelineState, splitClipAtPlayhead } = useTimeline();
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => {
@@ -96,6 +96,46 @@ export function Timeline() {
     });
   }, [videos, setTimelineState]);
 
+  // Handle split clip
+  const handleSplitClip = useCallback(() => {
+    const { playheadPosition, selectedClipId, clips } = timelineState;
+    
+    if (!selectedClipId) {
+      console.warn('No clip selected');
+      return;
+    }
+
+    // Find the clip at playhead position
+    const clipAtPlayhead = clips.find(clip => 
+      playheadPosition >= clip.startTime && 
+      playheadPosition < clip.startTime + clip.duration
+    );
+
+    if (!clipAtPlayhead || clipAtPlayhead.id !== selectedClipId) {
+      console.warn('Playhead is not over the selected clip');
+      return;
+    }
+
+    splitClipAtPlayhead(selectedClipId, playheadPosition);
+  }, [timelineState, splitClipAtPlayhead]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleSplitClip();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSplitClip]);
 
   return (
     <div className="timeline-container">
@@ -109,6 +149,17 @@ export function Timeline() {
             Zoom Out
           </button>
           <span>Zoom: {timelineState.zoom.toFixed(1)}x</span>
+          <button 
+            onClick={handleSplitClip}
+            disabled={!timelineState.selectedClipId || !timelineState.clips.find(c => 
+              c.id === timelineState.selectedClipId &&
+              timelineState.playheadPosition >= c.startTime && 
+              timelineState.playheadPosition < c.startTime + c.duration
+            )}
+            title="Split clip at playhead (S)"
+          >
+            ✂️ Split
+          </button>
         </div>
       </div>
       
