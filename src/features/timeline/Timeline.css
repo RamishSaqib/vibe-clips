@@ -60,6 +60,20 @@
   background: #a00;
 }
 
+.timeline-controls button.snap-button {
+  background: #333;
+  border-color: #555;
+}
+
+.timeline-controls button.snap-button.active {
+  background: #2a7a2a;
+  border-color: #3a9a3a;
+}
+
+.timeline-controls button.snap-button.active:hover {
+  background: #3a9a3a;
+}
+
 .timeline-controls span {
   font-size: 0.875rem;
   color: #999;
