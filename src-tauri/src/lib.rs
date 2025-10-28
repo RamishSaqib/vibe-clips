@@ -495,6 +495,10 @@ fn export_video(
     app_handle: tauri::AppHandle,
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
+    width: u32,
+    height: u32,
+    crf: String,
+    preset: String,
 ) -> Result<String, String> {
     // Write to log FIRST THING to verify function is called - try multiple locations
     let _ = std::fs::write("C:/export_debug.log", "=== FUNCTION CALLED ===\n");
@@ -560,14 +564,19 @@ fn export_video(
             cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
         }
         
-        // Use fast preset with proper encoding
+        // Use configured preset and quality
         cmd.arg("-c:v").arg("libx264");
-        cmd.arg("-preset").arg("ultrafast");
-        cmd.arg("-crf").arg("23"); // Better quality
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(&crf);
         cmd.arg("-c:a").arg("aac"); // Re-encode audio for compatibility
         cmd.arg("-b:a").arg("192k"); // Audio bitrate
         cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
         cmd.arg("-movflags").arg("faststart"); // Web-friendly
+        
+        // Add resolution scaling if specified (width > 0)
+        if width > 0 && height > 0 {
+            cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+        }
         
         // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
@@ -623,11 +632,16 @@ fn export_video(
         }
         
         cmd.arg("-c:v").arg("libx264");
-        cmd.arg("-preset").arg("ultrafast");
-        cmd.arg("-crf").arg("23");
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(&crf);
         cmd.arg("-c:a").arg("aac");
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
+        
+        // Add resolution scaling if specified
+        if width > 0 && height > 0 {
+            cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+        }
         
         // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
@@ -695,6 +709,74 @@ fn export_video(
     }
 }
 
+#[tauri::command]
+fn import_video_file(
+    app_handle: tauri::AppHandle,
+    file_path: String
+) -> Result<String, String> {
+    // Check if it's a MOV file
+    if file_path.to_lowercase().ends_with(".mov") {
+        println!("MOV file detected, converting for compatibility...");
+        
+        // Create a temporary MP4 version
+        let temp_dir = std::env::temp_dir();
+        let file_name = std::path::Path::new(&file_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("converted");
+        let output_path = temp_dir.join(format!("{}_converted.mp4", file_name));
+        let output_path_str = output_path.to_string_lossy().to_string();
+        
+        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+        cmd.arg("-y");
+        cmd.arg("-i").arg(&file_path);
+        
+        // Force re-encode to ensure compatibility
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg("medium"); // Better compatibility than "fast"
+        cmd.arg("-crf").arg("23");
+        cmd.arg("-pix_fmt").arg("yuv420p"); // Ensure compatible pixel format
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+        cmd.arg("-movflags").arg("faststart");
+        cmd.arg(&output_path_str);
+        cmd.arg("-hide_banner");
+        cmd.arg("-loglevel").arg("warning");
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::piped());
+        
+        let output = cmd.output()
+            .map_err(|e| format!("Failed to convert MOV: {}", e))?;
+        
+        if output.status.success() {
+            // Wait for file to be fully written and flushed
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            
+            // Verify the file exists and has content
+            if let Ok(metadata) = std::fs::metadata(&output_path_str) {
+                if metadata.len() > 0 {
+                    println!("Successfully converted MOV to: {} (size: {} bytes)", output_path_str, metadata.len());
+                    return Ok(output_path_str);
+                } else {
+                    println!("Converted file is empty, using original");
+                    return Ok(file_path);
+                }
+            }
+            
+            println!("Converted file not found, using original");
+            Ok(file_path)
+        } else {
+            let error = String::from_utf8_lossy(&output.stderr);
+            println!("Conversion failed: {}", error);
+            // Fall back to original file if conversion fails
+            Ok(file_path)
+        }
+    } else {
+        // Not a MOV, use as-is
+        Ok(file_path)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -716,48 +798,10 @@ pub fn run() {
         get_recording_status,
         mux_video_audio,
         convert_webm_to_mp4,
-        composite_pip_video
+        composite_pip_video,
+        import_video_file
     ])
     .setup(|app| {
-      let app_handle = app.handle().clone();
-      
-      // Listen for file-drop events from the OS
-      app.handle().listen("tauri://file-drop", move |event| {
-        println!("Rust: File drop event received");
-        let payload_str = event.payload();
-        println!("Rust: payload_str = {}", payload_str);
-        
-        let payload: Vec<String> = serde_json::from_str(payload_str)
-            .unwrap_or_else(|e| {
-                println!("Rust: Failed to parse payload: {:?}", e);
-                vec![]
-            });
-        
-        println!("Rust: Parsed {} file paths", payload.len());
-        
-        if !payload.is_empty() {
-            println!("Rust: Emitting file-drop event to frontend with {} files", payload.len());
-            // Emit the file paths to the frontend
-            let _ = app_handle.emit("file-drop", &payload);
-        }
-      });
-      
-      // Listen for file-drop-hover
-      app.handle().listen("tauri://file-drop-hover", move |event| {
-        println!("Rust: File drag over window");
-        let payload_str = event.payload();
-        if let Ok(paths) = serde_json::from_str::<Vec<String>>(payload_str) {
-          println!("Rust: Hover payload = {:?}", paths);
-        }
-      });
-      
-      // Listen for file-drop-cancelled
-      app.handle().listen("tauri://file-drop-cancelled", move |_event| {
-        println!("Rust: File drag cancelled");
-      });
-      
-      println!("Rust: File-drop listeners registered successfully");
-      
       Ok(())
     })
     .run(tauri::generate_context!())

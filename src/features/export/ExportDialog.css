@@ -35,6 +35,49 @@
   margin: 4px 0;
 }
 
+.export-settings {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.export-setting {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-setting label {
+  color: #ddd;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-setting select {
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.export-setting select:hover:not(:disabled) {
+  border-color: #555;
+}
+
+.export-setting select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.export-setting select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
 .export-path {
   margin-bottom: 20px;
 }
