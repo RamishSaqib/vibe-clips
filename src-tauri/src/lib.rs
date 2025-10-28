@@ -60,16 +60,16 @@ async fn export_video(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add flags to suppress progress output
+        // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("error"); // Only show errors, not progress
-        cmd.arg("-stats"); // Show basic stats but not the progress spam
+        cmd.arg("-loglevel").arg("quiet"); // Completely silent
+        cmd.arg("-nostats"); // No stats output
         
         cmd.arg(&output_path);
         
         println!("Executing FFmpeg...");
         
-        // Redirect stderr to null to suppress all FFmpeg output
+        // CRITICAL: Redirect stdout/stderr to null BEFORE executing
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
         
@@ -124,10 +124,10 @@ async fn export_video(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add flags to suppress progress spam
+        // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("error");
-        cmd.arg("-stats");
+        cmd.arg("-loglevel").arg("quiet");
+        cmd.arg("-nostats");
         
         cmd.arg(temp_file.to_str().unwrap());
         
@@ -169,10 +169,10 @@ async fn export_video(
     cmd.arg("-i").arg(concat_file.to_str().unwrap());
     cmd.arg("-c").arg("copy");
     
-    // Add flags to suppress progress spam for concat too
+    // Add flags to suppress ALL output for concat too
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
-    cmd.arg("-stats");
+    cmd.arg("-loglevel").arg("quiet");
+    cmd.arg("-nostats");
     
     cmd.arg(&output_path);
     
