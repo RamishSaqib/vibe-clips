@@ -83,13 +83,17 @@ async fn export_video(
         cmd.arg(&output_path);
         
         println!("Executing FFmpeg...");
+        println!("Input file: {}", path);
+        println!("Output file: {}", output_path);
         
         // Capture stderr to get error messages
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::piped());
         
+        println!("Spawning FFmpeg process...");
         let output = cmd.output()
             .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+        println!("FFmpeg process completed");
         
         if output.status.success() {
             println!("=== EXPORT SUCCESS ===");
