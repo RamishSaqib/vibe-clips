@@ -150,6 +150,8 @@ This will create a distributable in `src-tauri/target/release/bundle/`:
 - **macOS:** `.dmg` or `.app`
 - **Linux:** `.deb` or `.AppImage`
 
+**⚠️ Important:** The built application requires FFmpeg to be installed and accessible in the system PATH for video processing features to work (thumbnails, playback, export, recording). Make sure FFmpeg is installed on the target system as described in the [Installing FFmpeg](#installing-ffmpeg) section above.
+
 ---
 
 ## 📁 Project Structure
