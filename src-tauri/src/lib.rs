@@ -17,13 +17,13 @@ fn test_export() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn export_video(
+fn export_video(
     clips: Vec<ClipData>,
-    output_path: String,
+    #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
     // Log to file to avoid terminal spam
     let log_msg = format!("\n\n========== EXPORT CALLED ==========\nClips count: {}\nOutput path: {}\n", 
-                          clips.len(), output_path);
+                          clips.len(), outputPath);
     let _ = std::fs::write("export_debug.log", log_msg);
     
     if clips.is_empty() {
@@ -33,21 +33,21 @@ async fn export_video(
     let _ = std::fs::write("export_debug.log", "Got clips, starting export...\n");
 
     println!("=== EXPORT START ===");
-    println!("Exporting {} clips to '{}'", clips.len(), output_path);
+    println!("Exporting {} clips to '{}'", clips.len(), outputPath);
     println!("Output path length: {}, ends with .mp4: {}, ends with .mov: {}", 
-             output_path.len(), 
-             output_path.ends_with(".mp4"), 
-             output_path.ends_with(".mov"));
+             outputPath.len(), 
+             outputPath.ends_with(".mp4"), 
+             outputPath.ends_with(".mov"));
     
     // Validate output path has a filename
-    if !output_path.ends_with(".mp4") && !output_path.ends_with(".mov") {
+    if !outputPath.ends_with(".mp4") && !outputPath.ends_with(".mov") {
         println!("ERROR: Output path validation failed!");
-        let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", output_path);
+        let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", outputPath);
         println!("Error: {}", error_msg);
         return Err(error_msg);
     }
     
-    println!("Output path validated: {}", output_path);
+    println!("Output path validated: {}", outputPath);
     
     for (i, clip) in clips.iter().enumerate() {
         println!("Clip {}: path={}, trim_start={}, duration={}", 
@@ -70,7 +70,7 @@ async fn export_video(
         let path = clip.file_path.replace("\\", "/");
         
         println!("Building single clip command...");
-        println!("Input: {}, Output: {}", path, output_path);
+        println!("Input: {}, Output: {}", path, outputPath);
         
         let mut cmd = Command::new("ffmpeg");
         cmd.arg("-y");
@@ -101,10 +101,10 @@ async fn export_video(
         cmd.arg("-loglevel").arg("error"); // Show errors only
         cmd.arg("-nostats"); // No stats output
         
-        cmd.arg(&output_path);
+        cmd.arg(&outputPath);
         
         // Write to a log file to avoid terminal spam
-        let log_msg = format!("Exporting: input='{}' output='{}'\n", path, output_path);
+        let log_msg = format!("Exporting: input='{}' output='{}'\n", path, outputPath);
         let _ = std::fs::write("export.log", log_msg);
         
         // Redirect ALL output to null to prevent spam
@@ -118,9 +118,9 @@ async fn export_video(
         println!("FFmpeg finished with exit code: {:?}", status.code());
         
         // Check if output file was created
-        if std::path::Path::new(&output_path).exists() {
+        if std::path::Path::new(&outputPath).exists() {
             println!("=== EXPORT SUCCESS ===");
-            return Ok(format!("Video exported successfully to {}", output_path));
+            return Ok(format!("Video exported successfully to {}", outputPath));
         } else if status.success() {
             println!("=== EXPORT FAILED: File not created despite success code ===");
             return Err("FFmpeg completed but output file was not created".to_string());
@@ -218,7 +218,7 @@ async fn export_video(
     cmd.arg("-loglevel").arg("error");
     cmd.arg("-nostats");
     
-    cmd.arg(&output_path);
+    cmd.arg(&outputPath);
     
     println!("Concatenating {} clips...", temp_files.len());
     
@@ -238,7 +238,7 @@ async fn export_video(
     
     if output.status.success() {
         println!("=== EXPORT SUCCESS ===");
-        Ok(format!("Video exported successfully to {}", output_path))
+        Ok(format!("Video exported successfully to {}", outputPath))
     } else {
         println!("=== EXPORT FAILED ===");
         let error = String::from_utf8_lossy(&output.stderr);
