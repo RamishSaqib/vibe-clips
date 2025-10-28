@@ -46,7 +46,7 @@ fn save_temp_video(data_url: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn export_video(
+fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
