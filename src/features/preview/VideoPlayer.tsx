@@ -161,7 +161,7 @@ export function VideoPlayer() {
     <div className="video-player">
       <video
         ref={videoRef}
-        src={currentClip.video.path.startsWith('data:') ? currentClip.video.path : convertFileSrc(currentClip.video.path)}
+        src={convertFileSrc(currentClip.video.path)}
         className="video-element"
         onError={(e) => {
           console.error('Video load error:', e);
