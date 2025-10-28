@@ -22,37 +22,34 @@ fn export_video(
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
     // Log to file to avoid terminal spam
-    let log_msg = format!("\n\n========== EXPORT CALLED ==========\nClips count: {}\nOutput path: {}\n", 
+    let mut log = format!("\n\n========== EXPORT CALLED ==========\nClips count: {}\nOutput path: {}\n", 
                           clips.len(), outputPath);
-    let _ = std::fs::write("export_debug.log", log_msg);
     
     if clips.is_empty() {
-        let _ = std::fs::write("export_debug.log", "ERROR: No clips\n");
+        log.push_str("ERROR: No clips\n");
+        let _ = std::fs::write("export_debug.log", &log);
         return Err("No clips to export".to_string());
     }
-    let _ = std::fs::write("export_debug.log", "Got clips, starting export...\n");
-
-    println!("=== EXPORT START ===");
-    println!("Exporting {} clips to '{}'", clips.len(), outputPath);
-    println!("Output path length: {}, ends with .mp4: {}, ends with .mov: {}", 
-             outputPath.len(), 
-             outputPath.ends_with(".mp4"), 
-             outputPath.ends_with(".mov"));
+    
+    log.push_str("Got clips, starting export...\n");
+    log.push_str(&format!("Exporting {} clips to '{}'\n", clips.len(), outputPath));
     
     // Validate output path has a filename
     if !outputPath.ends_with(".mp4") && !outputPath.ends_with(".mov") {
-        println!("ERROR: Output path validation failed!");
         let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", outputPath);
-        println!("Error: {}", error_msg);
+        log.push_str(&format!("ERROR: {}\n", error_msg));
+        let _ = std::fs::write("export_debug.log", &log);
         return Err(error_msg);
     }
     
-    println!("Output path validated: {}", outputPath);
+    log.push_str(&format!("Output path validated: {}\n", outputPath));
     
     for (i, clip) in clips.iter().enumerate() {
-        println!("Clip {}: path={}, trim_start={}, duration={}", 
-                 i, clip.file_path, clip.trim_start, clip.duration);
+        log.push_str(&format!("Clip {}: path={}, trim_start={}, duration={}\n", 
+                 i, clip.file_path, clip.trim_start, clip.duration));
     }
+    
+    let _ = std::fs::write("export_debug.log", &log);
     
     // Sort clips by start_time to maintain order
     let mut sorted_clips = clips.clone();
@@ -69,15 +66,11 @@ fn export_video(
         
         let path = clip.file_path.replace("\\", "/");
         
-        println!("Building single clip command...");
-        println!("Input: {}, Output: {}", path, outputPath);
-        
         let mut cmd = Command::new("ffmpeg");
         cmd.arg("-y");
         
         // Only add trim if needed
         if clip.trim_start > 0.0 {
-            println!("Adding trim start: {}", clip.trim_start);
             cmd.arg("-ss").arg(&format!("{:.3}", clip.trim_start));
         }
         
@@ -85,7 +78,6 @@ fn export_video(
         
         // Only add duration if trimmed
         if clip.trim_start > 0.0 || clip.duration > 0.0 {
-            println!("Adding duration: {}", clip.duration);
             cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
         }
         
@@ -96,45 +88,36 @@ fn export_video(
         cmd.arg("-c:a").arg("copy"); // Copy audio, don't re-encode
         cmd.arg("-movflags").arg("faststart"); // Web-friendly
         
-        // Add flags to suppress ALL output except errors
+        // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("error"); // Show errors only
-        cmd.arg("-nostats"); // No stats output
+        cmd.arg("-loglevel").arg("quiet");
+        cmd.arg("-nostats");
         
         cmd.arg(&outputPath);
-        
-        // Write to a log file to avoid terminal spam
-        let log_msg = format!("Exporting: input='{}' output='{}'\n", path, outputPath);
-        let _ = std::fs::write("export.log", log_msg);
         
         // Redirect ALL output to null to prevent spam
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
         
-        println!("Starting FFmpeg...");
         let status = cmd.status()
             .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
         
-        println!("FFmpeg finished with exit code: {:?}", status.code());
-        
         // Check if output file was created
         if std::path::Path::new(&outputPath).exists() {
-            println!("=== EXPORT SUCCESS ===");
+            let _ = std::fs::write("export_debug.log", "=== EXPORT SUCCESS ===\n");
             return Ok(format!("Video exported successfully to {}", outputPath));
         } else if status.success() {
-            println!("=== EXPORT FAILED: File not created despite success code ===");
+            let _ = std::fs::write("export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
             return Err("FFmpeg completed but output file was not created".to_string());
         } else {
-            println!("=== EXPORT FAILED ===");
+            let _ = std::fs::write("export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
             return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
         }
     }
     
     // Multiple clips: create temporary trimmed files then concat them
-    println!("Multiple clips, using temp file approach...");
     use std::env;
     let temp_dir = env::temp_dir();
-    println!("Temp dir: {:?}", temp_dir);
     
     let mut temp_files = Vec::new();
     
@@ -144,8 +127,6 @@ fn export_video(
         temp_files.push(temp_file.clone());
         
         let path = clip.file_path.replace("\\", "/");
-        
-        println!("Processing clip {} of {}: {}", i + 1, sorted_clips.len(), path);
         
         let mut cmd = Command::new("ffmpeg");
         cmd.arg("-y");
@@ -167,28 +148,23 @@ fn export_video(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add flags to suppress ALL output except errors
+        // Add flags to suppress ALL output
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("error");
+        cmd.arg("-loglevel").arg("quiet");
         cmd.arg("-nostats");
         
         cmd.arg(temp_file.to_str().unwrap());
         
-        println!("Processing clip {}...", i);
-        
-        // Capture errors
+        // Suppress all output
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::piped());
+        cmd.stderr(Stdio::null());
         
-        let output = cmd.output()
+        let status = cmd.status()
             .map_err(|e| format!("Failed to execute FFmpeg for clip {}: {}", i, e))?;
         
-        if !output.status.success() {
-            let error = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to trim clip {}: {}", i, error));
+        if !status.success() {
+            return Err(format!("Failed to trim clip {}: exit code {:?}", i, status.code()));
         }
-        
-        println!("Clip {} processed successfully", i);
     }
     
     // Step 2: Create concat file list
@@ -198,12 +174,8 @@ fn export_video(
         .map(|f| format!("file '{}'\n", f.to_str().unwrap()))
         .collect();
     
-    println!("Concat file content:\n{}", concat_content);
-    
     std::fs::write(&concat_file, concat_content)
         .map_err(|e| format!("Failed to write concat file: {}", e))?;
-    
-    println!("Concatenating {} clips...", temp_files.len());
     
     // Step 3: Concat all temp files
     let mut cmd = Command::new("ffmpeg");
@@ -213,36 +185,32 @@ fn export_video(
     cmd.arg("-i").arg(concat_file.to_str().unwrap());
     cmd.arg("-c").arg("copy");
     
-    // Add flags to suppress ALL output except errors for concat too
+    // Add flags to suppress ALL output
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
+    cmd.arg("-loglevel").arg("quiet");
     cmd.arg("-nostats");
     
     cmd.arg(&outputPath);
     
-    println!("Concatenating {} clips...", temp_files.len());
-    
-    // Capture errors
+    // Suppress all output
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped());
+    cmd.stderr(Stdio::null());
     
-    let output = cmd.output()
+    let status = cmd.status()
         .map_err(|e| format!("Failed to execute FFmpeg concat: {}", e))?;
     
     // Cleanup temp files
-    println!("Cleaning up temp files...");
     for temp_file in &temp_files {
         let _ = std::fs::remove_file(temp_file);
     }
     let _ = std::fs::remove_file(&concat_file);
     
-    if output.status.success() {
-        println!("=== EXPORT SUCCESS ===");
+    if status.success() {
+        let _ = std::fs::write("export_debug.log", "=== EXPORT SUCCESS ===\n");
         Ok(format!("Video exported successfully to {}", outputPath))
     } else {
-        println!("=== EXPORT FAILED ===");
-        let error = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Concatenation failed: {}", error))
+        let _ = std::fs::write("export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+        Err(format!("Concatenation failed with exit code: {:?}", status.code()))
     }
 }
 
