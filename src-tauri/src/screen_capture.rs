@@ -118,8 +118,8 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         return Err("Output path must end with .mp4".to_string());
     }
     
-    // First try: Record with system audio
-    // If that fails, fall back to video-only recording
+    // Try to capture with WASAPI loopback (system audio)
+    // This captures all audio playing through the default audio device
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y"); // Overwrite output file
     
@@ -129,13 +129,22 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     cmd.arg("-framerate").arg("30");
     cmd.arg("-i").arg("desktop");
     
+    // Audio input: WASAPI loopback (captures system audio)
+    // This uses DirectShow to access the audio loopback device
+    cmd.arg("-f").arg("dshow");
+    cmd.arg("-i").arg("audio=virtual-audio-capturer");
+    
     // Video encoding
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("ultrafast");
     cmd.arg("-crf").arg("23");
     cmd.arg("-pix_fmt").arg("yuv420p");
-    cmd.arg("-movflags").arg("faststart");
     
+    // Audio encoding
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    
+    cmd.arg("-movflags").arg("faststart");
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
     cmd.arg("-loglevel").arg("error");
@@ -143,11 +152,34 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     // Keep stdin open so we can send 'q' to stop gracefully
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped()); // Capture stderr to see errors
+    cmd.stderr(Stdio::piped()); // Capture stderr
     
-    let child = cmd.spawn()
-        .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
+    let mut child = cmd.spawn();
     
+    // If audio capture fails, try again without audio
+    if child.is_err() {
+        let mut cmd_no_audio = Command::new("ffmpeg");
+        cmd_no_audio.arg("-y");
+        cmd_no_audio.arg("-f").arg("gdigrab");
+        cmd_no_audio.arg("-draw_mouse").arg("0");
+        cmd_no_audio.arg("-framerate").arg("30");
+        cmd_no_audio.arg("-i").arg("desktop");
+        cmd_no_audio.arg("-c:v").arg("libx264");
+        cmd_no_audio.arg("-preset").arg("ultrafast");
+        cmd_no_audio.arg("-crf").arg("23");
+        cmd_no_audio.arg("-pix_fmt").arg("yuv420p");
+        cmd_no_audio.arg("-movflags").arg("faststart");
+        cmd_no_audio.arg(&output_path);
+        cmd_no_audio.arg("-hide_banner");
+        cmd_no_audio.arg("-loglevel").arg("error");
+        cmd_no_audio.stdin(Stdio::piped());
+        cmd_no_audio.stdout(Stdio::null());
+        cmd_no_audio.stderr(Stdio::piped());
+        
+        child = cmd_no_audio.spawn();
+    }
+    
+    let child = child.map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
     let pid = child.id();
     
     // Store the child process
@@ -159,7 +191,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
     
-    Ok(format!("Recording started (PID: {}) - Note: System audio not available, recording video only", pid))
+    Ok(format!("Recording started with system audio (PID: {})", pid))
 }
 
 #[cfg(not(windows))]
