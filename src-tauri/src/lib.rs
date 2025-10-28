@@ -21,8 +21,11 @@ fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
+    // Write to log FIRST THING to verify function is called
+    let _ = std::fs::write("export_debug.log", "=== FUNCTION CALLED ===\n");
+    
     // Log to file to avoid terminal spam
-    let mut log = format!("\n\n========== EXPORT CALLED ==========\nClips count: {}\nOutput path: {}\n", 
+    let mut log = format!("Clips count: {}\nOutput path: {}\n", 
                           clips.len(), outputPath);
     
     if clips.is_empty() {
