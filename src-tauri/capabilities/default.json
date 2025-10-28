@@ -11,6 +11,7 @@
     "core:window:allow-request-user-attention",
     "fs:allow-read-file",
     "fs:allow-write-file",
-    "fs:allow-exists"
+    "fs:allow-exists",
+    "dialog:allow-save"
   ]
 }

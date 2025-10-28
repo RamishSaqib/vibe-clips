@@ -80,9 +80,22 @@ Before you begin, ensure you have:
 ### Installing FFmpeg
 
 **Windows:**
+
+**Option 1 - Manual Installation (Recommended):**
+1. Download FFmpeg from [https://www.gyan.dev/ffmpeg/builds/](https://www.gyan.dev/ffmpeg/builds/)
+2. Download the latest build (e.g., `ffmpeg-release-full.7z`)
+3. Extract to `C:\ffmpeg\` (or any location you prefer)
+4. Add `C:\ffmpeg\bin` to your System PATH:
+   - Open System Properties → Environment Variables
+   - Edit "Path" variable
+   - Add: `C:\ffmpeg\bin`
+   - Click OK to save
+5. Verify: Open a new terminal and run `ffmpeg -version`
+
+**Option 2 - Package Manager:**
 ```bash
-# Using Chocolatey
-choco install ffmpeg
+# Using Chocolatey (run as Administrator)
+choco install ffmpeg -y
 
 # Or using winget
 winget install ffmpeg
