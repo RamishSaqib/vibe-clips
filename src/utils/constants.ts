@@ -11,6 +11,7 @@ export const TIMELINE_CONSTANTS = {
   DEFAULT_ZOOM: 1,
   MIN_ZOOM: 0.5,
   MAX_ZOOM: 10,
+  SNAP_THRESHOLD: 0.5, // seconds - snap clips within 0.5s of edges
 } as const;
 
 /**

@@ -21,6 +21,7 @@ const {
   HANDLE_WIDTH,
   HANDLE_TOLERANCE,
   MIN_CLIP_DURATION,
+  SNAP_THRESHOLD,
 } = TIMELINE_CONSTANTS;
 
 const TOTAL_HEIGHT = RULER_HEIGHT + TRACK_HEIGHT;
@@ -37,6 +38,40 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
   const didMoveRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState<{ clipId: string; handle: 'left' | 'right' } | null>(null);
+  const [snapIndicator, setSnapIndicator] = useState<number | null>(null); // Position in seconds where snap is occurring
+
+  // Helper function to find nearest snap point
+  const findSnapPoint = useCallback((time: number, snapEnabled: boolean): { time: number; snapped: boolean } => {
+    if (!snapEnabled) {
+      return { time, snapped: false };
+    }
+
+    // Collect all clip edges (start and end times)
+    const clipEdges: number[] = [];
+    for (const clip of state.clips) {
+      clipEdges.push(clip.startTime); // Clip start
+      clipEdges.push(clip.startTime + clip.duration); // Clip end
+    }
+    clipEdges.push(0); // Timeline start
+
+    // Find the nearest edge within snap threshold
+    let nearestEdge: number | null = null;
+    let minDistance: number = SNAP_THRESHOLD;
+
+    for (const edge of clipEdges) {
+      const distance = Math.abs(time - edge);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestEdge = edge;
+      }
+    }
+
+    if (nearestEdge !== null) {
+      return { time: nearestEdge, snapped: true };
+    }
+
+    return { time, snapped: false };
+  }, [state.clips]);
 
   // Memoize maxDuration to avoid recalculation on every render
   const maxDuration = useMemo(() => {
@@ -323,7 +358,21 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [state, videos, hoveredHandle, maxDuration, canvasWidth]);
+
+    // Draw snap indicator (dashed line)
+    if (snapIndicator !== null) {
+      const snapX = snapIndicator * PIXELS_PER_SECOND * state.zoom;
+      
+      ctx.strokeStyle = '#ffff00'; // Yellow
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // Dashed line
+      ctx.beginPath();
+      ctx.moveTo(snapX, 0);
+      ctx.lineTo(snapX, TOTAL_HEIGHT);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset to solid line
+    }
+  }, [state, videos, hoveredHandle, maxDuration, canvasWidth, snapIndicator]);
 
   // Handle mouse move for hover effects - use useCallback to prevent recreation
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -524,7 +573,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     
     // Handle playhead dragging
     const clampedTime = Math.max(0, Math.min(clickTime, maxTime));
-    onPlayheadDrag(clampedTime);
+    const snapResult = findSnapPoint(clampedTime, state.snapEnabled);
+    onPlayheadDrag(snapResult.time);
+    if (snapResult.snapped) {
+      setSnapIndicator(snapResult.time);
+    } else {
+      setSnapIndicator(null);
+    }
     isDraggingRef.current = true;
     
     const handleMove = (moveEvent: MouseEvent) => {
@@ -544,18 +599,28 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
       const clampedTime = Math.max(0, Math.min(newTime, maxTime));
       
-      onPlayheadDrag(clampedTime);
+      // Apply snapping
+      const snapResult = findSnapPoint(clampedTime, state.snapEnabled);
+      onPlayheadDrag(snapResult.time);
+      
+      // Show snap indicator when snapping
+      if (snapResult.snapped) {
+        setSnapIndicator(snapResult.time);
+      } else {
+        setSnapIndicator(null);
+      }
     };
     
     const handleUp = () => {
       isDraggingRef.current = false;
+      setSnapIndicator(null); // Clear snap indicator on mouse up
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleUp);
     };
     
     document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
-  }, [state.clips, videos, onClipTrim, onPlayheadDrag, onClipSelect, state.zoom, maxDuration]);
+  }, [state.clips, videos, onClipTrim, onPlayheadDrag, onClipSelect, state.zoom, state.snapEnabled, maxDuration, findSnapPoint]);
 
   // Handle drag and drop - use useCallback
   const handleDragOver = useCallback((e: React.DragEvent) => {

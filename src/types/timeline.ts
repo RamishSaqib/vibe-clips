@@ -16,5 +16,6 @@ export interface TimelineState {
   zoom: number; // Zoom level (1 = normal, 2 = doubled, etc.)
   scrollOffset: number; // Horizontal scroll offset in pixels
   selectedClipId: string | null;
+  snapEnabled: boolean; // Whether snap-to-edge is enabled
 }
 

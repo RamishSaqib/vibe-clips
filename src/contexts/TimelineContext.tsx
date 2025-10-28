@@ -18,6 +18,7 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     zoom: 1,
     scrollOffset: 0,
     selectedClipId: null,
+    snapEnabled: true, // Snap enabled by default
   });
 
   const removeClipsByVideoId = (videoFileId: string) => {

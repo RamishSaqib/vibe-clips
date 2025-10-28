@@ -184,6 +184,13 @@ export function Timeline() {
           </button>
           <span>Zoom: {timelineState.zoom.toFixed(1)}x</span>
           <button 
+            onClick={() => setTimelineState(prev => ({ ...prev, snapEnabled: !prev.snapEnabled }))}
+            className={timelineState.snapEnabled ? 'snap-button active' : 'snap-button'}
+            title={timelineState.snapEnabled ? 'Snap enabled' : 'Snap disabled'}
+          >
+            🧲 {timelineState.snapEnabled ? 'Snap On' : 'Snap Off'}
+          </button>
+          <button 
             onClick={handleSplitClip}
             disabled={!timelineState.selectedClipId || !timelineState.clips.find(c => 
               c.id === timelineState.selectedClipId &&
