@@ -27,10 +27,10 @@ async fn export_video(
     let _ = std::fs::write("export_debug.log", log_msg);
     
     if clips.is_empty() {
-        println!("ERROR: No clips");
+        let _ = std::fs::write("export_debug.log", "ERROR: No clips\n");
         return Err("No clips to export".to_string());
     }
-    println!("========== EXPORT CALLED ==========\n\n\n");
+    let _ = std::fs::write("export_debug.log", "Got clips, starting export...\n");
 
     println!("=== EXPORT START ===");
     println!("Exporting {} clips to '{}'", clips.len(), output_path);
