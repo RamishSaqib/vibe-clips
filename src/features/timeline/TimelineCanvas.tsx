@@ -70,8 +70,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.stroke();
       
       ctx.fillStyle = '#999';
-      ctx.font = '12px sans-serif';
-      ctx.fillText(formatTime(time), x + 4, 12);
+      ctx.font = '11px sans-serif';
+      ctx.textBaseline = 'top'; // Align text from the top
+      ctx.fillText(formatTime(time), x + 4, 2); // Move much higher (y=2 instead of y=12)
       ctx.fillStyle = '#555';
     }
 

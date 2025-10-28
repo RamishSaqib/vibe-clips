@@ -31,6 +31,7 @@ export interface RecordingState {
   screenPath: string | null;
   pipConfig: PiPConfig | null;
   audioOptions: AudioOptions | null;
+  screenStartOffset: number | null; // Seconds that screen started before webcam
 }
 
 export type RecordingType = 'screen' | 'webcam' | 'combined';

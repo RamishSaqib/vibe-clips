@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 
 mod screen_capture;
+mod audio_capture;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
@@ -60,6 +61,25 @@ fn get_file_size(file_path: String) -> Result<u64, String> {
     let metadata = fs::metadata(&file_path)
         .map_err(|e| format!("Failed to get file size: {}", e))?;
     Ok(metadata.len())
+}
+
+#[tauri::command]
+fn get_video_duration_from_file(video_path: String) -> Result<f64, String> {
+    let output = Command::new("ffprobe")
+        .arg("-v").arg("error")
+        .arg("-show_entries").arg("format=duration")
+        .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
+        .arg(&video_path)
+        .output()
+        .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
+    
+    if !output.status.success() {
+        return Err("Failed to get video duration".to_string());
+    }
+    
+    let duration_str = String::from_utf8_lossy(&output.stdout);
+    duration_str.trim().parse::<f64>()
+        .map_err(|e| format!("Failed to parse duration: {}", e))
 }
 
 #[tauri::command]
@@ -139,91 +159,6 @@ fn test_ffmpeg() -> Result<String, String> {
     
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout.lines().take(1).collect::<Vec<&str>>().join(""))
-}
-
-// Helper function to find WASAPI loopback device
-fn find_loopback_device() -> Option<String> {
-    // Try to get list of audio devices
-    let output = Command::new("ffmpeg")
-        .arg("-list_devices").arg("true")
-        .arg("-f").arg("dshow")
-        .arg("-i").arg("dummy")
-        .output()
-        .ok()?;
-    
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let mut in_audio_section = false;
-    
-    // Parse FFmpeg output for loopback/stereo mix devices
-    for line in stderr.lines() {
-        if line.contains("DirectShow audio devices") {
-            in_audio_section = true;
-            continue;
-        }
-        if in_audio_section {
-            if line.contains("DirectShow video devices") {
-                break;
-            }
-            // Extract device name
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line[start+1..].find('"') {
-                    let device_name = &line[start+1..start+1+end];
-                    // Check if it's a loopback device
-                    let lower = device_name.to_lowercase();
-                    if lower.contains("stereo mix") || 
-                       lower.contains("wave out") || 
-                       lower.contains("loopback") ||
-                       lower.contains("what u hear") {
-                        return Some(device_name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    
-    None
-}
-
-// Helper function to find default microphone
-fn find_microphone_device() -> Option<String> {
-    let output = Command::new("ffmpeg")
-        .arg("-list_devices").arg("true")
-        .arg("-f").arg("dshow")
-        .arg("-i").arg("dummy")
-        .output()
-        .ok()?;
-    
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let mut in_audio_section = false;
-    
-    // Parse FFmpeg output for microphone devices
-    for line in stderr.lines() {
-        if line.contains("DirectShow audio devices") {
-            in_audio_section = true;
-            continue;
-        }
-        if in_audio_section {
-            if line.contains("DirectShow video devices") {
-                break;
-            }
-            // Extract device name
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line[start+1..].find('"') {
-                    let device_name = &line[start+1..start+1+end];
-                    let lower = device_name.to_lowercase();
-                    // Skip loopback devices, find actual microphones
-                    if !lower.contains("stereo mix") && 
-                       !lower.contains("wave out") && 
-                       !lower.contains("loopback") &&
-                       (lower.contains("microphone") || lower.contains("mic")) {
-                        return Some(device_name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    
-    None
 }
 
 #[tauri::command]
@@ -318,7 +253,8 @@ fn composite_pip_video(
     webcam_path: String, 
     pip_config: PiPConfig,
     audio_options: AudioOptions,
-    output_path: String
+    output_path: String,
+    screen_start_offset: Option<f64>, // Seconds to delay screen audio/video
 ) -> Result<String, String> {
     // First, probe the input files to see which streams they actually have
     let screen_has_audio = check_has_audio_stream(&screen_path);
@@ -345,39 +281,77 @@ fn composite_pip_video(
         _ => format!("W-w-{}:H-h-{}", pip_config.padding, pip_config.padding), // Default to bottom-right
     };
 
+    // Get screen video duration (master timeline)
+    let screen_duration = match get_video_duration_from_file(screen_path.clone()) {
+        Ok(dur) => {
+            println!("Screen recording duration: {:.2}s", dur);
+            dur
+        },
+        Err(e) => {
+            println!("Warning: Could not get screen duration: {}", e);
+            0.0
+        }
+    };
+
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y");
-    cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording
+    cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording (master timeline)
     cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
     
-    // Handle different audio combinations based on what's actually available
+    // Use screen recording as master timeline
+    cmd.arg("-map_metadata").arg("0");
+    cmd.arg("-fflags").arg("+genpts");
+    
+    let delay_offset = screen_start_offset.unwrap_or(0.0);
+    println!("Compositing with screen delay offset: {:.3}s", delay_offset);
+    
+    // Handle different audio combinations WITH PROPER DELAY
     if use_screen_audio && use_webcam_audio {
-        // Both system audio (from screen) and mic audio (from webcam)
+        // Both system audio and mic audio
+        let screen_audio_filter = if delay_offset > 0.01 {
+            // Delay screen audio AND pad the end so it doesn't get cut short
+            let delay_ms = (delay_offset * 1000.0) as i32;
+            format!("[0:a]adelay={}|{},apad[a0]", delay_ms, delay_ms)
+        } else {
+            String::from("[0:a]acopy[a0]")
+        };
+        
         let filter_complex = format!(
-            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a][1:a]amix=inputs=2:duration=longest[aout]",
-            pip_width, pip_height, overlay_position
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];{};[1:a]apad[a1];[a0][a1]amix=inputs=2:duration=longest[aout]",
+            pip_width, pip_height, overlay_position, screen_audio_filter
         );
         cmd.arg("-filter_complex").arg(&filter_complex);
         cmd.arg("-map").arg("[vout]");
         cmd.arg("-map").arg("[aout]");
     } else if use_screen_audio {
-        // System audio only (from screen)
-        let filter_complex = format!(
-            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
-            pip_width, pip_height, overlay_position
-        );
-        cmd.arg("-filter_complex").arg(&filter_complex);
-        cmd.arg("-map").arg("[vout]");
-        cmd.arg("-map").arg("0:a"); // Screen audio
+        // System audio only - need to delay it and pad
+        if delay_offset > 0.01 {
+            let delay_ms = (delay_offset * 1000.0) as i32;
+            let filter_complex = format!(
+                "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a]adelay={}|{},apad[aout]",
+                pip_width, pip_height, overlay_position, delay_ms, delay_ms
+            );
+            cmd.arg("-filter_complex").arg(&filter_complex);
+            cmd.arg("-map").arg("[vout]");
+            cmd.arg("-map").arg("[aout]");
+        } else {
+            let filter_complex = format!(
+                "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
+                pip_width, pip_height, overlay_position
+            );
+            cmd.arg("-filter_complex").arg(&filter_complex);
+            cmd.arg("-map").arg("[vout]");
+            cmd.arg("-map").arg("0:a");
+        }
     } else if use_webcam_audio {
-        // Mic audio only (from webcam)
+        // Mic audio only - pad to match video duration
         let filter_complex = format!(
-            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[1:a]apad[aout]",
             pip_width, pip_height, overlay_position
         );
         cmd.arg("-filter_complex").arg(&filter_complex);
         cmd.arg("-map").arg("[vout]");
-        cmd.arg("-map").arg("1:a"); // Webcam audio
+        cmd.arg("-map").arg("[aout]");
     } else {
         // No audio
         let filter_complex = format!(
@@ -385,7 +359,6 @@ fn composite_pip_video(
             pip_width, pip_height, overlay_position
         );
         cmd.arg("-filter_complex").arg(&filter_complex);
-        // No audio mapping
     }
     
     // Video and audio encoding
@@ -397,6 +370,15 @@ fn composite_pip_video(
         cmd.arg("-c:a").arg("aac");
         cmd.arg("-b:a").arg("192k");
     }
+    
+    // Set output duration to match screen recording (master timeline)
+    if screen_duration > 0.0 {
+        cmd.arg("-t").arg(format!("{:.3}", screen_duration));
+    }
+    
+    // Don't use -shortest when we have delayed audio
+    // Instead, let the video determine the duration (via -t)
+    // The adelay filter will pad with silence, so audio won't be cut short
     
     cmd.arg("-movflags").arg("faststart");
     cmd.arg(&output_path);
@@ -648,6 +630,7 @@ pub fn run() {
         export_video,
         get_temp_dir,
         get_file_size,
+        get_video_duration_from_file,
         generate_video_thumbnail,
         list_screen_sources,
         list_audio_devices,

@@ -43,6 +43,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     screenPath: null,
     pipConfig: null,
     audioOptions: null,
+    screenStartOffset: null,
   });
 
   const { addVideo } = useVideos();
@@ -146,6 +147,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         webcamPath: null,
         screenPath: null,
         pipConfig: null,
+        audioOptions: null,
+        screenStartOffset: null,
       });
     } catch (error) {
       console.error('Failed to start screen recording:', error);
@@ -229,6 +232,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         webcamPath: null,
         screenPath: null,
         pipConfig: null,
+        audioOptions: null,
+        screenStartOffset: null,
       });
     } catch (error) {
       console.error('Failed to start webcam recording:', error);
@@ -255,10 +260,20 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       const webcamPath = `${tempDir}\\combined_webcam_${timestamp}.mp4`;
       const compositePath = `${tempDir}\\combined_composite_${timestamp}.mp4`;
 
+      // Track timing for sync
+      const screenStartTime = performance.now();
+
       // Start screen recording via Rust (will include system audio if available)
       await invoke('start_screen_recording_async', { 
         outputPath: screenPath
       });
+
+      // Track when webcam starts (after screen has started)
+      const webcamStartTime = performance.now();
+      const timingOffset = (webcamStartTime - screenStartTime) / 1000; // Convert to seconds
+      
+      console.log(`Timing: Screen started at ${screenStartTime.toFixed(2)}ms, Webcam started at ${webcamStartTime.toFixed(2)}ms`);
+      console.log(`Screen recording started ${timingOffset.toFixed(3)}s before webcam`);
 
       // Start webcam recording via MediaRecorder
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -331,6 +346,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         screenPath,
         pipConfig,
         audioOptions,
+        screenStartOffset: timingOffset, // Store the timing offset for compositing
       });
     } catch (error) {
       console.error('Failed to start combined recording:', error);
@@ -432,6 +448,10 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         // Get actual file size
         const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
         
+        // Get actual duration from the file (more accurate than frontend timer)
+        const actualDuration = await invoke<number>('get_video_duration_from_file', { videoPath: finalPath });
+        console.log(`Screen recording actual duration: ${actualDuration.toFixed(2)}s (timer: ${recordingState.duration.toFixed(2)}s)`);
+        
         // Generate thumbnail
         const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
         let thumbnail: string | undefined;
@@ -449,7 +469,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           id: `recording_${Date.now()}`,
           path: finalPath,
           filename: finalPath.split('\\').pop() || 'recording.mp4',
-          duration: recordingState.duration,
+          duration: actualDuration, // Use actual file duration instead of timer
           size: fileSize,
           resolution: { width: 1920, height: 1080 },
           thumbnail,
@@ -476,6 +496,10 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         // Get actual file size
         const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
         
+        // Get actual duration from the file (more accurate than frontend timer)
+        const actualDuration = await invoke<number>('get_video_duration_from_file', { videoPath: finalPath });
+        console.log(`Webcam recording actual duration: ${actualDuration.toFixed(2)}s (timer: ${recordingState.duration.toFixed(2)}s)`);
+        
         // Generate thumbnail
         const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
         let thumbnail: string | undefined;
@@ -493,7 +517,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           id: `recording_${Date.now()}`,
           path: finalPath,
           filename: finalPath.split('\\').pop() || 'recording.mp4',
-          duration: recordingState.duration,
+          duration: actualDuration, // Use actual file duration
           size: fileSize,
           resolution: { width: 1920, height: 1080 },
           thumbnail,
@@ -536,6 +560,11 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         // Save screen-only if requested
         if (options.saveScreen) {
           const fileSize = await invoke<number>('get_file_size', { filePath: screenPath });
+          
+          // Get actual duration from the file (more accurate than frontend timer)
+          const screenDuration = await invoke<number>('get_video_duration_from_file', { videoPath: screenPath });
+          console.log(`Combined screen recording actual duration: ${screenDuration.toFixed(2)}s (timer: ${recordingState.duration.toFixed(2)}s)`);
+          
           const thumbnailPath = screenPath.replace(/\.mp4$/, '_thumb.jpg');
           let thumbnail: string | undefined;
           try {
@@ -552,7 +581,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
             id: `screen_${Date.now()}`,
             path: screenPath,
             filename: screenPath.split('\\').pop() || 'screen.mp4',
-            duration: recordingState.duration,
+            duration: screenDuration, // Use actual file duration
             size: fileSize,
             resolution: { width: 1920, height: 1080 },
             thumbnail,
@@ -563,6 +592,11 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         // Save webcam-only if requested
         if (options.saveWebcam) {
           const fileSize = await invoke<number>('get_file_size', { filePath: webcamPath });
+          
+          // Get actual duration from the file (more accurate than frontend timer)
+          const webcamDuration = await invoke<number>('get_video_duration_from_file', { videoPath: webcamPath });
+          console.log(`Combined webcam recording actual duration: ${webcamDuration.toFixed(2)}s (timer: ${recordingState.duration.toFixed(2)}s)`);
+          
           const thumbnailPath = webcamPath.replace(/\.mp4$/, '_thumb.jpg');
           let thumbnail: string | undefined;
           try {
@@ -579,7 +613,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
             id: `webcam_${Date.now()}`,
             path: webcamPath,
             filename: webcamPath.split('\\').pop() || 'webcam.mp4',
-            duration: recordingState.duration,
+            duration: webcamDuration, // Use actual file duration
             size: fileSize,
             resolution: { width: 1920, height: 1080 },
             thumbnail,
@@ -595,10 +629,16 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
             webcamPath,
             pipConfig,
             audioOptions: recordingState.audioOptions,
-            outputPath
+            outputPath,
+            screenStartOffset: recordingState.screenStartOffset, // Pass timing offset
           });
 
           const fileSize = await invoke<number>('get_file_size', { filePath: outputPath });
+          
+          // Get actual duration from the composite file (most accurate)
+          const compositeDuration = await invoke<number>('get_video_duration_from_file', { videoPath: outputPath });
+          console.log(`Composite recording actual duration: ${compositeDuration.toFixed(2)}s (timer: ${recordingState.duration.toFixed(2)}s)`);
+          
           const thumbnailPath = outputPath.replace(/\.mp4$/, '_thumb.jpg');
           let thumbnail: string | undefined;
           try {
@@ -615,7 +655,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
             id: `composite_${Date.now()}`,
             path: outputPath,
             filename: outputPath.split('\\').pop() || 'combined.mp4',
-            duration: recordingState.duration,
+            duration: compositeDuration, // Use actual composite file duration
             size: fileSize,
             resolution: { width: 1920, height: 1080 },
             thumbnail,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useRecording } from '../../contexts/RecordingContext';
 import type { ScreenSource, PiPConfig } from '../../types/recording';
 import './CombinedRecording.css';
@@ -36,7 +37,20 @@ export default function CombinedRecording() {
   useEffect(() => {
     loadSources();
     loadCameras();
+    checkAudioDevices(); // Debug: check available audio devices
   }, []);
+
+  const checkAudioDevices = async () => {
+    try {
+      const devices = await invoke<string[]>('list_audio_devices');
+      console.log('Available audio devices:', devices);
+      if (devices.length === 0) {
+        console.warn('No audio devices detected by FFmpeg!');
+      }
+    } catch (err) {
+      console.error('Failed to list audio devices:', err);
+    }
+  };
 
   const loadSources = async () => {
     try {
