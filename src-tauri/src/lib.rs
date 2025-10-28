@@ -48,9 +48,17 @@ async fn export_video(
     // If only one clip, use simple trimming
     if sorted_clips.len() == 1 {
         let clip = &sorted_clips[0];
+        
+        // Validate input file exists
+        if !std::path::Path::new(&clip.file_path).exists() {
+            return Err(format!("Input video file not found: {}", clip.file_path));
+        }
+        
         let path = clip.file_path.replace("\\", "/");
         
         println!("Building single clip command...");
+        println!("Input: {}, Output: {}", path, output_path);
+        
         let mut cmd = Command::new("ffmpeg");
         cmd.arg("-y");
         
@@ -68,12 +76,12 @@ async fn export_video(
             cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
         }
         
+        // Use fast preset and copy audio to speed up export
         cmd.arg("-c:v").arg("libx264");
         cmd.arg("-preset").arg("ultrafast");
-        cmd.arg("-crf").arg("23");
-        cmd.arg("-c:a").arg("aac");
-        cmd.arg("-b:a").arg("192k");
-        cmd.arg("-pix_fmt").arg("yuv420p");
+        cmd.arg("-crf").arg("28"); // Lower quality but faster
+        cmd.arg("-c:a").arg("copy"); // Copy audio, don't re-encode
+        cmd.arg("-movflags").arg("faststart"); // Web-friendly
         
         // Add flags to suppress ALL output except errors
         cmd.arg("-hide_banner");
