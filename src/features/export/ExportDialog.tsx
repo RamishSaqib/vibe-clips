@@ -88,19 +88,26 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
     console.log('Browse button clicked');
     try {
       console.log('Calling save dialog...');
+      
       const path = await save({
         title: 'Save Exported Video',
-        defaultPath: 'output.mp4',
+        defaultPath: 'my-video.mp4', // More specific default name
         filters: [{
-          name: 'MP4 Video',
-          extensions: ['mp4']
+          name: 'Video Files',
+          extensions: ['mp4', 'mov', 'avi']
         }]
       });
       
       console.log('Save dialog returned:', path);
       
       if (path) {
-        setOutputPath(path);
+        // Ensure the path has .mp4 extension
+        let finalPath = path;
+        if (!finalPath.toLowerCase().endsWith('.mp4')) {
+          finalPath = `${finalPath}.mp4`;
+        }
+        setOutputPath(finalPath);
+        console.log('Final output path:', finalPath);
       } else {
         console.log('User cancelled file dialog');
       }
