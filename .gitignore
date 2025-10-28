@@ -49,3 +49,7 @@ temp/
 
 # MD Files for just my reference
 RUBRIC.md
+
+# FFmpeg binaries (too large for GitHub)
+src-tauri/binaries/*.exe
+src-tauri/binaries/*.dll

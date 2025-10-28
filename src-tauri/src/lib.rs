@@ -155,26 +155,34 @@ fn get_video_duration_from_file(app_handle: tauri::AppHandle, video_path: String
 
 #[tauri::command]
 fn generate_video_thumbnail(app_handle: tauri::AppHandle, video_path: String, output_path: String) -> Result<String, String> {
+    println!("Generating thumbnail for: {}", video_path);
+    println!("Output path: {}", output_path);
+    
     let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
-    cmd.arg("-ss").arg("00:00:01"); // Take frame at 1 second
+    cmd.arg("-ss").arg("00:00:00.5"); // Take frame at 0.5 seconds (more reliable)
     cmd.arg("-vframes").arg("1"); // Extract 1 frame
     cmd.arg("-vf").arg("scale=160:90"); // Thumbnail size
+    cmd.arg("-q:v").arg("2"); // High quality JPEG
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
-    cmd.stdout(Stdio::null());
+    cmd.arg("-loglevel").arg("info"); // Changed from error to info for debugging
+    cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
     
     if output.status.success() {
+        println!("Thumbnail generated successfully");
         Ok(output_path)
     } else {
-        let error = String::from_utf8_lossy(&output.stderr);
-        Err(format!("FFmpeg thumbnail error: {}", error))
+        let error_str = String::from_utf8_lossy(&output.stderr);
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        println!("FFmpeg stderr: {}", error_str);
+        println!("FFmpeg stdout: {}", stdout_str);
+        Err(format!("FFmpeg thumbnail error: {}", error_str))
     }
 }
 
@@ -374,51 +382,46 @@ fn composite_pip_video(
     cmd.arg("-map_metadata").arg("0");
     cmd.arg("-fflags").arg("+genpts");
     
-    let delay_offset = screen_start_offset.unwrap_or(0.0);
-    println!("Compositing with screen delay offset: {:.3}s", delay_offset);
+    let mut delay_offset = screen_start_offset.unwrap_or(0.0);
+    
+    // Add a small buffer (100ms) to account for webcam processing latency
+    // Webcams typically have 50-150ms inherent delay compared to screen capture
+    delay_offset += 0.100;
+    
+    println!("Compositing with screen delay offset: {:.3}s (includes 100ms webcam latency buffer)", delay_offset);
+    
+    // Ensure proper A/V sync
+    cmd.arg("-fps_mode").arg("vfr");
     
     // Handle different audio combinations WITH PROPER DELAY
+    // Note: aresample=async=1 is built into the filter_complex to fix sync issues
     if use_screen_audio && use_webcam_audio {
         // Both system audio and mic audio
-        let screen_audio_filter = if delay_offset > 0.01 {
-            // Delay screen audio AND pad the end so it doesn't get cut short
-            let delay_ms = (delay_offset * 1000.0) as i32;
-            format!("[0:a]adelay={}|{},apad[a0]", delay_ms, delay_ms)
-        } else {
-            String::from("[0:a]acopy[a0]")
-        };
+        // Always apply delay since we now always have at least the 100ms buffer
+        let delay_ms = (delay_offset * 1000.0) as i32;
+        let screen_audio_filter = format!("[0:a]adelay={}|{},aresample=async=1,apad[a0]", delay_ms, delay_ms);
         
         let filter_complex = format!(
-            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];{};[1:a]apad[a1];[a0][a1]amix=inputs=2:duration=longest[aout]",
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];{};[1:a]aresample=async=1,apad[a1];[a0][a1]amix=inputs=2:duration=longest[aout]",
             pip_width, pip_height, overlay_position, screen_audio_filter
         );
         cmd.arg("-filter_complex").arg(&filter_complex);
         cmd.arg("-map").arg("[vout]");
         cmd.arg("-map").arg("[aout]");
     } else if use_screen_audio {
-        // System audio only - need to delay it and pad
-        if delay_offset > 0.01 {
-            let delay_ms = (delay_offset * 1000.0) as i32;
-            let filter_complex = format!(
-                "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a]adelay={}|{},apad[aout]",
-                pip_width, pip_height, overlay_position, delay_ms, delay_ms
-            );
-            cmd.arg("-filter_complex").arg(&filter_complex);
-            cmd.arg("-map").arg("[vout]");
-            cmd.arg("-map").arg("[aout]");
-        } else {
-            let filter_complex = format!(
-                "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
-                pip_width, pip_height, overlay_position
-            );
-            cmd.arg("-filter_complex").arg(&filter_complex);
-            cmd.arg("-map").arg("[vout]");
-            cmd.arg("-map").arg("0:a");
-        }
+        // System audio only - always apply delay (includes webcam latency buffer)
+        let delay_ms = (delay_offset * 1000.0) as i32;
+        let filter_complex = format!(
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a]adelay={}|{},aresample=async=1,apad[aout]",
+            pip_width, pip_height, overlay_position, delay_ms, delay_ms
+        );
+        cmd.arg("-filter_complex").arg(&filter_complex);
+        cmd.arg("-map").arg("[vout]");
+        cmd.arg("-map").arg("[aout]");
     } else if use_webcam_audio {
         // Mic audio only - pad to match video duration
         let filter_complex = format!(
-            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[1:a]apad[aout]",
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[1:a]aresample=async=1,apad[aout]",
             pip_width, pip_height, overlay_position
         );
         cmd.arg("-filter_complex").arg(&filter_complex);
@@ -433,9 +436,9 @@ fn composite_pip_video(
         cmd.arg("-filter_complex").arg(&filter_complex);
     }
     
-    // Video and audio encoding
+    // Video and audio encoding - use ultrafast for speed
     cmd.arg("-c:v").arg("libx264");
-    cmd.arg("-preset").arg("fast");
+    cmd.arg("-preset").arg("ultrafast");
     cmd.arg("-crf").arg("23");
     
     if use_screen_audio || use_webcam_audio {
@@ -455,7 +458,7 @@ fn composite_pip_video(
     cmd.arg("-movflags").arg("faststart");
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
+    cmd.arg("-loglevel").arg("info");
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped());
     

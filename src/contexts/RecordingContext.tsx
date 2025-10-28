@@ -642,13 +642,17 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           const thumbnailPath = outputPath.replace(/\.mp4$/, '_thumb.jpg');
           let thumbnail: string | undefined;
           try {
+            console.log('Generating thumbnail for composite video:', outputPath);
             await invoke('generate_video_thumbnail', { 
               videoPath: outputPath, 
               outputPath: thumbnailPath 
             });
             thumbnail = thumbnailPath;
+            console.log('Thumbnail generated successfully:', thumbnailPath);
           } catch (err) {
-            console.warn('Failed to generate composite thumbnail:', err);
+            console.error('Failed to generate composite thumbnail:', err);
+            console.error('Video path:', outputPath);
+            console.error('Thumbnail path:', thumbnailPath);
           }
           
           const compositeVideo: VideoFile = {
