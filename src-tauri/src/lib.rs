@@ -93,6 +93,43 @@ fn list_screen_sources() -> Result<Vec<screen_capture::ScreenSource>, String> {
 }
 
 #[tauri::command]
+fn list_audio_devices() -> Result<Vec<String>, String> {
+    // List available audio devices using FFmpeg
+    let output = Command::new("ffmpeg")
+        .arg("-list_devices").arg("true")
+        .arg("-f").arg("dshow")
+        .arg("-i").arg("dummy")
+        .output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+    
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut audio_devices = Vec::new();
+    
+    // Parse FFmpeg output for audio devices
+    let mut in_audio_section = false;
+    for line in stderr.lines() {
+        if line.contains("DirectShow audio devices") {
+            in_audio_section = true;
+            continue;
+        }
+        if in_audio_section {
+            if line.contains("DirectShow video devices") {
+                break;
+            }
+            // Extract device name from lines like: [dshow @ ...] "Device Name"
+            if let Some(start) = line.find('"') {
+                if let Some(end) = line[start+1..].find('"') {
+                    let device_name = &line[start+1..start+1+end];
+                    audio_devices.push(device_name.to_string());
+                }
+            }
+        }
+    }
+    
+    Ok(audio_devices)
+}
+
+#[tauri::command]
 fn start_screen_recording_async(output_path: String) -> Result<String, String> {
     screen_capture::start_screen_recording_process(output_path)
 }
@@ -449,6 +486,7 @@ pub fn run() {
         get_file_size,
         generate_video_thumbnail,
         list_screen_sources,
+        list_audio_devices,
         start_screen_recording_async,
         stop_screen_recording_async,
         get_recording_status,
