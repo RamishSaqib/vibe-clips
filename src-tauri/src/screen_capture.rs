@@ -118,73 +118,33 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         return Err("Output path must end with .mp4".to_string());
     }
     
-    // Try different audio loopback device names (try each until one works)
-    let audio_devices = vec![
-        "virtual-audio-capturer",
-        "Stereo Mix",
-        "Wave Out Mix", 
-        "CABLE Output",
-        "Loopback"
-    ];
+    // For now, just do simple video-only recording to ensure it works
+    // We can add audio later once video is working reliably
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+    cmd.arg("-f").arg("gdigrab");
+    cmd.arg("-draw_mouse").arg("0");
+    cmd.arg("-framerate").arg("30");
+    cmd.arg("-i").arg("desktop");
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("ultrafast");
+    cmd.arg("-crf").arg("23");
+    cmd.arg("-pix_fmt").arg("yuv420p");
+    cmd.arg("-movflags").arg("faststart");
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("warning"); // Change from error to warning to see more
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped()); // Keep stderr for debugging
     
-    let mut child = None;
+    println!("Starting FFmpeg with output: {}", output_path);
     
-    // Try each audio device
-    for audio_device in &audio_devices {
-        let mut cmd = Command::new("ffmpeg");
-        cmd.arg("-y");
-        cmd.arg("-f").arg("gdigrab");
-        cmd.arg("-draw_mouse").arg("0");
-        cmd.arg("-framerate").arg("30");
-        cmd.arg("-i").arg("desktop");
-        cmd.arg("-f").arg("dshow");
-        cmd.arg("-i").arg(format!("audio={}", audio_device));
-        cmd.arg("-c:v").arg("libx264");
-        cmd.arg("-preset").arg("ultrafast");
-        cmd.arg("-crf").arg("23");
-        cmd.arg("-pix_fmt").arg("yuv420p");
-        cmd.arg("-c:a").arg("aac");
-        cmd.arg("-b:a").arg("192k");
-        cmd.arg("-movflags").arg("faststart");
-        cmd.arg(&output_path);
-        cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("error");
-        cmd.stdin(Stdio::piped());
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::piped());
-        
-        if let Ok(c) = cmd.spawn() {
-            child = Some(c);
-            break;
-        }
-    }
+    let child = cmd.spawn()
+        .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed and in PATH.", e))?;
     
-    // If all audio devices failed, try video-only
-    if child.is_none() {
-        let mut cmd_no_audio = Command::new("ffmpeg");
-        cmd_no_audio.arg("-y");
-        cmd_no_audio.arg("-f").arg("gdigrab");
-        cmd_no_audio.arg("-draw_mouse").arg("0");
-        cmd_no_audio.arg("-framerate").arg("30");
-        cmd_no_audio.arg("-i").arg("desktop");
-        cmd_no_audio.arg("-c:v").arg("libx264");
-        cmd_no_audio.arg("-preset").arg("ultrafast");
-        cmd_no_audio.arg("-crf").arg("23");
-        cmd_no_audio.arg("-pix_fmt").arg("yuv420p");
-        cmd_no_audio.arg("-movflags").arg("faststart");
-        cmd_no_audio.arg(&output_path);
-        cmd_no_audio.arg("-hide_banner");
-        cmd_no_audio.arg("-loglevel").arg("error");
-        cmd_no_audio.stdin(Stdio::piped());
-        cmd_no_audio.stdout(Stdio::null());
-        cmd_no_audio.stderr(Stdio::piped());
-        
-        child = Some(cmd_no_audio.spawn()
-            .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?);
-    }
-    
-    let child = child.ok_or("Failed to start recording")?;
     let pid = child.id();
+    println!("FFmpeg started with PID: {}", pid);
     
     // Store the child process
     let mut ffmpeg_child = FFMPEG_CHILD.lock().unwrap();
@@ -194,6 +154,45 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.output_path = Some(output_path.clone());
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
+    
+    // Small delay to check if process is still alive
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    
+    // Check if the process is still running
+    let mut ffmpeg_child_check = FFMPEG_CHILD.lock().unwrap();
+    if let Some(ref mut child) = *ffmpeg_child_check {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process already exited - this is bad
+                let stderr = child.stderr.take();
+                let error_msg = if let Some(mut stderr) = stderr {
+                    use std::io::Read;
+                    let mut buf = String::new();
+                    stderr.read_to_string(&mut buf).ok();
+                    buf
+                } else {
+                    "Unknown error".to_string()
+                };
+                
+                // Clean up session
+                drop(ffmpeg_child_check);
+                let mut session = RECORDING_SESSION.lock().unwrap();
+                session.is_recording = false;
+                session.output_path = None;
+                session.start_time = None;
+                session.ffmpeg_process = None;
+                
+                return Err(format!("FFmpeg exited immediately with status: {:?}. Error: {}", status.code(), error_msg));
+            }
+            Ok(None) => {
+                // Process is still running - good!
+                println!("FFmpeg is running successfully");
+            }
+            Err(e) => {
+                println!("Warning: Could not check FFmpeg status: {}", e);
+            }
+        }
+    }
     
     Ok(format!("Recording started (PID: {})", pid))
 }

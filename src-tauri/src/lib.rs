@@ -130,6 +130,18 @@ fn list_audio_devices() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn test_ffmpeg() -> Result<String, String> {
+    // Test if FFmpeg is available and working
+    let output = Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .map_err(|e| format!("FFmpeg not found or not executable: {}", e))?;
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().take(1).collect::<Vec<&str>>().join(""))
+}
+
+#[tauri::command]
 fn start_screen_recording_async(output_path: String) -> Result<String, String> {
     screen_capture::start_screen_recording_process(output_path)
 }
@@ -487,6 +499,7 @@ pub fn run() {
         generate_video_thumbnail,
         list_screen_sources,
         list_audio_devices,
+        test_ffmpeg,
         start_screen_recording_async,
         stop_screen_recording_async,
         get_recording_status,
