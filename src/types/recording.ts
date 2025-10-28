@@ -12,6 +12,11 @@ export interface PiPConfig {
   padding: number;
 }
 
+export interface AudioOptions {
+  includeSystemAudio: boolean;
+  includeMicAudio: boolean;
+}
+
 export interface RecordingState {
   isRecording: boolean;
   recordingType: 'screen' | 'webcam' | 'combined' | null;
@@ -25,6 +30,7 @@ export interface RecordingState {
   webcamPath: string | null;
   screenPath: string | null;
   pipConfig: PiPConfig | null;
+  audioOptions: AudioOptions | null;
 }
 
 export type RecordingType = 'screen' | 'webcam' | 'combined';

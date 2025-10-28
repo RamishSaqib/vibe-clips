@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { RecordingState, ScreenSource, PiPConfig } from '../types/recording';
+import type { RecordingState, ScreenSource, PiPConfig, AudioOptions } from '../types/recording';
 import { useVideos } from './VideoContext';
 import { useTimeline } from './TimelineContext';
 import type { VideoFile } from '../types/video';
@@ -15,7 +15,8 @@ interface RecordingContextType {
     source: ScreenSource, 
     deviceId: string, 
     resolution: { width: number; height: number },
-    pipConfig: PiPConfig
+    pipConfig: PiPConfig,
+    audioOptions: AudioOptions
   ) => Promise<void>;
   stopRecording: () => Promise<void>;
   saveRecording: (addToTimeline: boolean, saveOptions?: {
@@ -41,6 +42,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     webcamPath: null,
     screenPath: null,
     pipConfig: null,
+    audioOptions: null,
   });
 
   const { addVideo } = useVideos();
@@ -238,7 +240,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     source: ScreenSource, 
     deviceId: string, 
     resolution: { width: number; height: number },
-    pipConfig: PiPConfig
+    pipConfig: PiPConfig,
+    audioOptions: AudioOptions
   ) => {
     try {
       // Get temp directory from Rust
@@ -252,7 +255,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       const webcamPath = `${tempDir}\\combined_webcam_${timestamp}.mp4`;
       const compositePath = `${tempDir}\\combined_composite_${timestamp}.mp4`;
 
-      // Start screen recording via Rust
+      // Start screen recording via Rust (will include system audio if available)
       await invoke('start_screen_recording_async', { 
         outputPath: screenPath
       });
@@ -264,7 +267,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           width: { ideal: resolution.width },
           height: { ideal: resolution.height }
         },
-        audio: true // Capture microphone audio for combined recording
+        audio: audioOptions.includeMicAudio // Only capture mic if user wants it
       });
 
       setWebcamStream(stream);
@@ -327,6 +330,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         webcamPath,
         screenPath,
         pipConfig,
+        audioOptions,
       });
     } catch (error) {
       console.error('Failed to start combined recording:', error);
@@ -585,11 +589,12 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
         // Create composite PiP video if requested
         if (options.saveComposite) {
-          console.log('Creating composite:', { screenPath, webcamPath, pipConfig, outputPath });
+          console.log('Creating composite:', { screenPath, webcamPath, pipConfig, audioOptions: recordingState.audioOptions, outputPath });
           await invoke('composite_pip_video', {
             screenPath,
             webcamPath,
             pipConfig,
+            audioOptions: recordingState.audioOptions,
             outputPath
           });
 
@@ -654,6 +659,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         webcamPath: null,
         screenPath: null,
         pipConfig: null,
+        audioOptions: null,
       });
     } catch (error) {
       console.error('Failed to save recording:', error);

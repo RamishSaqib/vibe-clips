@@ -141,6 +141,91 @@ fn test_ffmpeg() -> Result<String, String> {
     Ok(stdout.lines().take(1).collect::<Vec<&str>>().join(""))
 }
 
+// Helper function to find WASAPI loopback device
+fn find_loopback_device() -> Option<String> {
+    // Try to get list of audio devices
+    let output = Command::new("ffmpeg")
+        .arg("-list_devices").arg("true")
+        .arg("-f").arg("dshow")
+        .arg("-i").arg("dummy")
+        .output()
+        .ok()?;
+    
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut in_audio_section = false;
+    
+    // Parse FFmpeg output for loopback/stereo mix devices
+    for line in stderr.lines() {
+        if line.contains("DirectShow audio devices") {
+            in_audio_section = true;
+            continue;
+        }
+        if in_audio_section {
+            if line.contains("DirectShow video devices") {
+                break;
+            }
+            // Extract device name
+            if let Some(start) = line.find('"') {
+                if let Some(end) = line[start+1..].find('"') {
+                    let device_name = &line[start+1..start+1+end];
+                    // Check if it's a loopback device
+                    let lower = device_name.to_lowercase();
+                    if lower.contains("stereo mix") || 
+                       lower.contains("wave out") || 
+                       lower.contains("loopback") ||
+                       lower.contains("what u hear") {
+                        return Some(device_name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
+// Helper function to find default microphone
+fn find_microphone_device() -> Option<String> {
+    let output = Command::new("ffmpeg")
+        .arg("-list_devices").arg("true")
+        .arg("-f").arg("dshow")
+        .arg("-i").arg("dummy")
+        .output()
+        .ok()?;
+    
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut in_audio_section = false;
+    
+    // Parse FFmpeg output for microphone devices
+    for line in stderr.lines() {
+        if line.contains("DirectShow audio devices") {
+            in_audio_section = true;
+            continue;
+        }
+        if in_audio_section {
+            if line.contains("DirectShow video devices") {
+                break;
+            }
+            // Extract device name
+            if let Some(start) = line.find('"') {
+                if let Some(end) = line[start+1..].find('"') {
+                    let device_name = &line[start+1..start+1+end];
+                    let lower = device_name.to_lowercase();
+                    // Skip loopback devices, find actual microphones
+                    if !lower.contains("stereo mix") && 
+                       !lower.contains("wave out") && 
+                       !lower.contains("loopback") &&
+                       (lower.contains("microphone") || lower.contains("mic")) {
+                        return Some(device_name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
 #[tauri::command]
 fn start_screen_recording_async(output_path: String) -> Result<String, String> {
     screen_capture::start_screen_recording_process(output_path)
@@ -219,11 +304,20 @@ struct PiPConfig {
     padding: u32,     // Padding from edges in pixels
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AudioOptions {
+    #[serde(rename = "includeSystemAudio")]
+    include_system_audio: bool,
+    #[serde(rename = "includeMicAudio")]
+    include_mic_audio: bool,
+}
+
 #[tauri::command]
 fn composite_pip_video(
     screen_path: String, 
     webcam_path: String, 
     pip_config: PiPConfig,
+    audio_options: AudioOptions,
     output_path: String
 ) -> Result<String, String> {
     // Calculate PiP dimensions based on size
@@ -243,27 +337,60 @@ fn composite_pip_video(
         _ => format!("W-w-{}:H-h-{}", pip_config.padding, pip_config.padding), // Default to bottom-right
     };
 
-    // Build FFmpeg command with overlay filter
-    // Scale webcam to PiP size and overlay on screen recording
-    let filter_complex = format!(
-        "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}",
-        pip_width, pip_height, overlay_position
-    );
-
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording
     cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
-    cmd.arg("-filter_complex").arg(&filter_complex);
     
-    // Mix audio from both sources (if webcam has audio, otherwise just use screen audio)
+    // Handle different audio combinations
+    if audio_options.include_system_audio && audio_options.include_mic_audio {
+        // Both system audio (from screen) and mic audio (from webcam)
+        let filter_complex = format!(
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a][1:a]amix=inputs=2:duration=longest[aout]",
+            pip_width, pip_height, overlay_position
+        );
+        cmd.arg("-filter_complex").arg(&filter_complex);
+        cmd.arg("-map").arg("[vout]");
+        cmd.arg("-map").arg("[aout]");
+    } else if audio_options.include_system_audio {
+        // System audio only (from screen)
+        let filter_complex = format!(
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
+            pip_width, pip_height, overlay_position
+        );
+        cmd.arg("-filter_complex").arg(&filter_complex);
+        cmd.arg("-map").arg("[vout]");
+        cmd.arg("-map").arg("0:a"); // Screen audio
+    } else if audio_options.include_mic_audio {
+        // Mic audio only (from webcam)
+        let filter_complex = format!(
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
+            pip_width, pip_height, overlay_position
+        );
+        cmd.arg("-filter_complex").arg(&filter_complex);
+        cmd.arg("-map").arg("[vout]");
+        cmd.arg("-map").arg("1:a"); // Webcam audio
+    } else {
+        // No audio
+        let filter_complex = format!(
+            "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}",
+            pip_width, pip_height, overlay_position
+        );
+        cmd.arg("-filter_complex").arg(&filter_complex);
+        // No audio mapping
+    }
+    
+    // Video and audio encoding
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("fast");
     cmd.arg("-crf").arg("23");
-    cmd.arg("-c:a").arg("aac");
-    cmd.arg("-b:a").arg("192k");
-    cmd.arg("-movflags").arg("faststart");
     
+    if audio_options.include_system_audio || audio_options.include_mic_audio {
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+    }
+    
+    cmd.arg("-movflags").arg("faststart");
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
     cmd.arg("-loglevel").arg("error");

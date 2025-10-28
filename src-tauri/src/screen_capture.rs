@@ -118,25 +118,72 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         return Err("Output path must end with .mp4".to_string());
     }
     
-    // For now, just do simple video-only recording to ensure it works
-    // We can add audio later once video is working reliably
+    // Find audio devices
+    let loopback = super::find_loopback_device();
+    let microphone = super::find_microphone_device();
+    
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y");
+    
+    // Video input
     cmd.arg("-f").arg("gdigrab");
     cmd.arg("-draw_mouse").arg("0");
     cmd.arg("-framerate").arg("30");
     cmd.arg("-i").arg("desktop");
+    
+    // Try different audio configurations
+    let mut has_audio = false;
+    
+    // Try loopback + mic (both system audio and microphone)
+    if let (Some(ref loopback_dev), Some(ref mic_dev)) = (&loopback, &microphone) {
+        cmd.arg("-f").arg("dshow");
+        cmd.arg("-i").arg(format!("audio={}", loopback_dev));
+        cmd.arg("-f").arg("dshow");
+        cmd.arg("-i").arg(format!("audio={}", mic_dev));
+        has_audio = true;
+    }
+    // Try loopback only
+    else if let Some(ref loopback_dev) = loopback {
+        cmd.arg("-f").arg("dshow");
+        cmd.arg("-i").arg(format!("audio={}", loopback_dev));
+        has_audio = true;
+    }
+    // Try mic only
+    else if let Some(ref mic_dev) = microphone {
+        cmd.arg("-f").arg("dshow");
+        cmd.arg("-i").arg(format!("audio={}", mic_dev));
+        has_audio = true;
+    }
+    
+    // Video encoding
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("ultrafast");
     cmd.arg("-crf").arg("23");
     cmd.arg("-pix_fmt").arg("yuv420p");
+    
+    // Audio encoding and mixing
+    if has_audio {
+        if loopback.is_some() && microphone.is_some() {
+            // Mix both audio inputs
+            cmd.arg("-filter_complex").arg("[1:a][2:a]amix=inputs=2:duration=longest[aout]");
+            cmd.arg("-map").arg("0:v");
+            cmd.arg("-map").arg("[aout]");
+        } else {
+            // Single audio input
+            cmd.arg("-map").arg("0:v");
+            cmd.arg("-map").arg("1:a");
+        }
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+    }
+    
     cmd.arg("-movflags").arg("faststart");
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("warning"); // Change from error to warning to see more
+    cmd.arg("-loglevel").arg("warning");
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped()); // Keep stderr for debugging
+    cmd.stderr(Stdio::piped());
     
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed and in PATH.", e))?;
@@ -152,7 +199,17 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
     
-    Ok(format!("Recording started (PID: {})", pid))
+    let audio_status = if loopback.is_some() && microphone.is_some() {
+        "system audio + mic"
+    } else if loopback.is_some() {
+        "system audio only"
+    } else if microphone.is_some() {
+        "mic only"
+    } else {
+        "no audio"
+    };
+    
+    Ok(format!("Recording started (PID: {}, audio: {})", pid, audio_status))
 }
 
 #[cfg(not(windows))]

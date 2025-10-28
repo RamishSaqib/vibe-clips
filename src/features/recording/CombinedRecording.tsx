@@ -19,6 +19,10 @@ export default function CombinedRecording() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Audio options
+  const [includeSystemAudio, setIncludeSystemAudio] = useState(true);
+  const [includeMicAudio, setIncludeMicAudio] = useState(true);
+  
   // Save options
   const [saveScreen, setSaveScreen] = useState(false);
   const [saveWebcam, setSaveWebcam] = useState(false);
@@ -115,7 +119,10 @@ export default function CombinedRecording() {
         setPreviewStream(null);
       }
 
-      await startCombinedRecording(selectedScreen, selectedCamera, resolution, pipConfig);
+      await startCombinedRecording(selectedScreen, selectedCamera, resolution, pipConfig, {
+        includeSystemAudio,
+        includeMicAudio
+      });
     } catch (err) {
       console.error('Failed to start recording:', err);
       setError(err instanceof Error ? err.message : 'Failed to start recording');
@@ -304,6 +311,28 @@ export default function CombinedRecording() {
               />
               <span>px</span>
             </div>
+          </div>
+
+          <div className="audio-options">
+            <h4>Audio Options</h4>
+            <label className="audio-option-checkbox">
+              <input 
+                type="checkbox" 
+                checked={includeSystemAudio}
+                onChange={(e) => setIncludeSystemAudio(e.target.checked)}
+                disabled={loading}
+              />
+              Include System Audio (desktop/apps)
+            </label>
+            <label className="audio-option-checkbox">
+              <input 
+                type="checkbox" 
+                checked={includeMicAudio}
+                onChange={(e) => setIncludeMicAudio(e.target.checked)}
+                disabled={loading}
+              />
+              Include Microphone
+            </label>
           </div>
 
           <div className="camera-preview-container">
