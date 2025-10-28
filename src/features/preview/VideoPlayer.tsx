@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import type { VideoFile } from '../../types/video';
 import { useTimeline } from '../../contexts/TimelineContext';
 import { useVideos } from '../../contexts/VideoContext';
@@ -153,7 +154,7 @@ export function VideoPlayer() {
     <div className="video-player">
       <video
         ref={videoRef}
-        src={currentClip.video.path}
+        src={convertFileSrc(currentClip.video.path)}
         className="video-element"
       />
       

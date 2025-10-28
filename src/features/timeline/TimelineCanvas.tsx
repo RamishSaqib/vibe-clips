@@ -24,6 +24,8 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const trimHandleRef = useRef<'left' | 'right' | null>(null);
   const trimmingClipRef = useRef<string | null>(null);
   const initialStateRef = useRef<{ clip: any; video: VideoFile } | null>(null);
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const didMoveRef = useRef(false);
 
   // Draw the timeline
   useEffect(() => {
@@ -179,6 +181,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
 
     e.preventDefault();
     
+    // Track initial mouse position for detecting clicks vs drags
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+    didMoveRef.current = false;
+    
     const maxTime = state.clips.length > 0 
       ? Math.max(...state.clips.map(c => c.startTime + c.duration))
       : 10;
@@ -238,6 +244,15 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const handleMove = (moveEvent: MouseEvent) => {
         if (!canvas || !container || !initialStateRef.current) return;
         
+        // Track that mouse moved (for detecting click vs drag)
+        if (mouseDownPosRef.current) {
+          const dx = Math.abs(moveEvent.clientX - mouseDownPosRef.current.x);
+          const dy = Math.abs(moveEvent.clientY - mouseDownPosRef.current.y);
+          if (dx > 3 || dy > 3) { // Movement threshold
+            didMoveRef.current = true;
+          }
+        }
+        
         const now = Date.now();
         if (now - lastTrimUpdateRef.current < 16) return;
         lastTrimUpdateRef.current = now;
@@ -281,10 +296,20 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       };
       
       const handleUp = () => {
+        // If no movement occurred, treat as a click and snap playhead to handle position
+        if (!didMoveRef.current && clickedClip && clickedHandle) {
+          const snapPosition = clickedHandle === 'left' 
+            ? clickedClip.startTime 
+            : clickedClip.startTime + clickedClip.duration;
+          onPlayheadDrag(snapPosition);
+        }
+        
         trimHandleRef.current = null;
         trimmingClipRef.current = null;
         initialStateRef.current = null;
         isDraggingRef.current = false;
+        mouseDownPosRef.current = null;
+        didMoveRef.current = false;
         document.removeEventListener('mousemove', handleMove);
         document.removeEventListener('mouseup', handleUp);
       };

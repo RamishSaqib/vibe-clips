@@ -49,33 +49,62 @@ fn save_temp_video(data_url: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_temp_dir() -> Result<String, String> {
+    let temp = std::env::temp_dir();
+    Ok(temp.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_file_size(file_path: String) -> Result<u64, String> {
+    use std::fs;
+    let metadata = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to get file size: {}", e))?;
+    Ok(metadata.len())
+}
+
+#[tauri::command]
+fn generate_video_thumbnail(video_path: String, output_path: String) -> Result<String, String> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+    cmd.arg("-i").arg(&video_path);
+    cmd.arg("-ss").arg("00:00:01"); // Take frame at 1 second
+    cmd.arg("-vframes").arg("1"); // Extract 1 frame
+    cmd.arg("-vf").arg("scale=160:90"); // Thumbnail size
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("error");
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+    
+    if output.status.success() {
+        Ok(output_path)
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("FFmpeg thumbnail error: {}", error))
+    }
+}
+
+#[tauri::command]
 fn list_screen_sources() -> Result<Vec<screen_capture::ScreenSource>, String> {
     screen_capture::list_screen_sources()
 }
 
 #[tauri::command]
-fn start_screen_recording(source_id: String, output_path: String) -> Result<String, String> {
-    screen_capture::start_screen_recording(source_id, output_path)
+fn start_screen_recording_async(output_path: String) -> Result<String, String> {
+    screen_capture::start_screen_recording_process(output_path)
 }
 
 #[tauri::command]
-fn stop_screen_recording() -> Result<String, String> {
-    screen_capture::stop_screen_recording()
+fn stop_screen_recording_async() -> Result<String, String> {
+    screen_capture::stop_screen_recording_process()
 }
 
 #[tauri::command]
 fn get_recording_status() -> Result<bool, String> {
     screen_capture::get_recording_status()
-}
-
-#[tauri::command]
-async fn capture_screen_ffmpeg(output_path: String, duration_secs: Option<u64>) -> Result<String, String> {
-    // Run in blocking task since FFmpeg is blocking
-    tokio::task::spawn_blocking(move || {
-        screen_capture::capture_screen_with_ffmpeg(output_path, duration_secs)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -317,11 +346,13 @@ pub fn run() {
         test_export, 
         save_temp_video, 
         export_video,
+        get_temp_dir,
+        get_file_size,
+        generate_video_thumbnail,
         list_screen_sources,
-        start_screen_recording,
-        stop_screen_recording,
+        start_screen_recording_async,
+        stop_screen_recording_async,
         get_recording_status,
-        capture_screen_ffmpeg,
         mux_video_audio
     ])
     .setup(|app| {

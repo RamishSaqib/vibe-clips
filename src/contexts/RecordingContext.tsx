@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import type { RecordingState, ScreenSource } from '../types/recording';
 import { useVideos } from './VideoContext';
 import { useTimeline } from './TimelineContext';
@@ -99,19 +100,21 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
   const startScreenRecording = useCallback(async (source: ScreenSource) => {
     try {
-      // Generate temp output path
+      // Get temp directory from Rust
+      let tempDir = await invoke<string>('get_temp_dir');
+      // Remove trailing backslash if present
+      tempDir = tempDir.replace(/[\\\/]$/, '');
+      
       const timestamp = Date.now();
-      const tempDir = await invoke<string>('plugin:fs|resolve', { path: '$TEMP' }).catch(() => 'C:\\Temp');
       const videoPath = `${tempDir}\\screen_recording_${timestamp}.mp4`;
       const outputPath = `${tempDir}\\screen_recording_final_${timestamp}.mp4`;
 
       // Start audio recording
       await startAudioRecording();
 
-      // Start screen recording via Rust (using FFmpeg)
-      await invoke('capture_screen_ffmpeg', { 
-        outputPath: videoPath,
-        durationSecs: null // Record indefinitely until stopped
+      // Start screen recording via Rust (FFmpeg spawned as background process)
+      await invoke('start_screen_recording_async', { 
+        outputPath: videoPath
       });
 
       setRecordingState({
@@ -138,13 +141,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       // Stop audio recording
       stopAudioRecording();
 
-      // The FFmpeg recording needs to be stopped via process termination
-      // For now, we'll handle this in a simpler way
-      // In a full implementation, we'd track the FFmpeg process and terminate it
+      // Stop screen recording (kills FFmpeg process)
+      const videoPath = await invoke<string>('stop_screen_recording_async');
 
       setRecordingState(prev => ({
         ...prev,
         isRecording: false,
+        videoPath, // Update with actual path from stop command
       }));
     } catch (error) {
       console.error('Failed to stop recording:', error);
@@ -160,51 +163,37 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      let finalPath = videoPath;
-
-      // If we have audio, mux it with the video
-      if (audioBlob) {
-        // Save audio blob to temp file
-        const audioArrayBuffer = await audioBlob.arrayBuffer();
-        const audioBytes = new Uint8Array(audioArrayBuffer);
-        const audioPath = videoPath.replace('.mp4', '_audio.webm');
-        
-        // Write audio file
-        await invoke('plugin:fs|write', {
-          path: audioPath,
-          data: Array.from(audioBytes)
-        });
-
-        // Mux video and audio
-        await invoke('mux_video_audio', {
-          videoPath,
-          audioPath,
-          outputPath
-        });
-
-        finalPath = outputPath;
-      }
-
-      // Extract metadata
-      const video = document.createElement('video');
-      video.preload = 'metadata';
+      // For now, skip metadata extraction and use placeholder values
+      // The video will load properly when played in the VideoPlayer component
       
-      await new Promise<void>((resolve, reject) => {
-        video.onloadedmetadata = () => resolve();
-        video.onerror = () => reject(new Error('Failed to load video metadata'));
-        video.src = `file://${finalPath}`;
-      });
-
+      // Get actual file size
+      const fileSize = await invoke<number>('get_file_size', { filePath: videoPath });
+      
+      // Generate thumbnail
+      const thumbnailPath = videoPath.replace('.mp4', '_thumb.jpg');
+      let thumbnail: string | undefined;
+      try {
+        await invoke('generate_video_thumbnail', { 
+          videoPath, 
+          outputPath: thumbnailPath 
+        });
+        thumbnail = thumbnailPath;
+      } catch (err) {
+        console.warn('Failed to generate thumbnail:', err);
+        // Continue without thumbnail
+      }
+      
       const videoFile: VideoFile = {
         id: `recording_${Date.now()}`,
-        path: finalPath,
-        filename: finalPath.split('\\').pop() || 'recording.mp4',
-        duration: video.duration,
-        size: 0, // Would need to get from file system
+        path: videoPath,
+        filename: videoPath.split('\\').pop() || 'recording.mp4',
+        duration: recordingState.duration, // Use recorded duration from timer
+        size: fileSize, // Actual file size in bytes
         resolution: {
-          width: video.videoWidth,
-          height: video.videoHeight,
+          width: 1920, // Placeholder - will be correct when video plays
+          height: 1080,
         },
+        thumbnail, // Thumbnail path if generated
       };
 
       // Add to media library

@@ -1,3 +1,4 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
 import type { VideoFile } from '../../types/video';
 import './MediaLibrary.css';
 
@@ -43,11 +44,18 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
               }}
             >
               <div className="media-thumbnail">
-                <video 
-                  src={video.path} 
-                  muted
-                  preload="metadata"
-                />
+                {video.thumbnail ? (
+                  <img 
+                    src={convertFileSrc(video.thumbnail)} 
+                    alt={video.filename}
+                  />
+                ) : (
+                  <video 
+                    src={convertFileSrc(video.path)} 
+                    muted
+                    preload="metadata"
+                  />
+                )}
               </div>
               <div className="media-info">
                 <div className="media-filename" title={video.filename}>

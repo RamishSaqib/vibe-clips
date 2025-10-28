@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::process::{Child, Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScreenSource {
@@ -10,11 +11,12 @@ pub struct ScreenSource {
     pub height: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RecordingSession {
     pub is_recording: bool,
     pub output_path: Option<String>,
     pub start_time: Option<std::time::SystemTime>,
+    pub ffmpeg_process: Option<u32>, // Store process ID
 }
 
 lazy_static::lazy_static! {
@@ -22,7 +24,9 @@ lazy_static::lazy_static! {
         is_recording: false,
         output_path: None,
         start_time: None,
+        ffmpeg_process: None,
     }));
+    static ref FFMPEG_CHILD: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 }
 
 #[cfg(windows)]
@@ -102,7 +106,7 @@ pub fn list_screen_sources() -> Result<Vec<ScreenSource>, String> {
 }
 
 #[cfg(windows)]
-pub fn start_screen_recording(_source_id: String, output_path: String) -> Result<String, String> {
+pub fn start_screen_recording_process(output_path: String) -> Result<String, String> {
     let mut session = RECORDING_SESSION.lock().unwrap();
     
     if session.is_recording {
@@ -114,23 +118,52 @@ pub fn start_screen_recording(_source_id: String, output_path: String) -> Result
         return Err("Output path must end with .mp4".to_string());
     }
     
+    // Start FFmpeg process with stdin available so we can send 'q' to stop gracefully
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y"); // Overwrite output file
+    cmd.arg("-f").arg("gdigrab"); // Windows screen capture
+    cmd.arg("-draw_mouse").arg("0"); // Don't draw mouse cursor to avoid flickering
+    cmd.arg("-framerate").arg("30");
+    cmd.arg("-i").arg("desktop"); // Capture entire desktop
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("ultrafast");
+    cmd.arg("-crf").arg("23");
+    cmd.arg("-pix_fmt").arg("yuv420p");
+    cmd.arg("-movflags").arg("faststart"); // Write moov atom at beginning for better compatibility
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("error");
+    
+    // Keep stdin open so we can send 'q' to stop gracefully
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    
+    let child = cmd.spawn()
+        .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
+    
+    let pid = child.id();
+    
+    // Store the child process
+    let mut ffmpeg_child = FFMPEG_CHILD.lock().unwrap();
+    *ffmpeg_child = Some(child);
+    
     session.is_recording = true;
     session.output_path = Some(output_path.clone());
     session.start_time = Some(std::time::SystemTime::now());
+    session.ffmpeg_process = Some(pid);
     
-    // Note: Actual screen capture implementation would go here
-    // For MVP, we'll use FFmpeg to capture the screen
-    // This is a placeholder that confirms the setup works
-    
-    Ok(format!("Recording started to {}", output_path))
+    Ok(format!("Recording started (PID: {})", pid))
 }
 
 #[cfg(not(windows))]
-pub fn start_screen_recording(_source_id: String, _output_path: String) -> Result<String, String> {
+pub fn start_screen_recording_process(_output_path: String) -> Result<String, String> {
     Err("Screen capture is only supported on Windows".to_string())
 }
 
-pub fn stop_screen_recording() -> Result<String, String> {
+pub fn stop_screen_recording_process() -> Result<String, String> {
+    use std::io::Write;
+    
     let mut session = RECORDING_SESSION.lock().unwrap();
     
     if !session.is_recording {
@@ -139,9 +172,32 @@ pub fn stop_screen_recording() -> Result<String, String> {
     
     let output_path = session.output_path.clone().unwrap_or_default();
     
+    // Send 'q' to FFmpeg to stop gracefully
+    let mut ffmpeg_child = FFMPEG_CHILD.lock().unwrap();
+    if let Some(mut child) = ffmpeg_child.take() {
+        // Try to send 'q' to stdin for graceful shutdown
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(b"q");
+            let _ = stdin.flush();
+        }
+        
+        // Wait for FFmpeg to finish
+        use std::time::Duration;
+        let wait_result = std::thread::spawn(move || {
+            child.wait()
+        });
+        
+        // Reduced wait time - FFmpeg usually finishes quickly after 'q'
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    
     session.is_recording = false;
     session.output_path = None;
     session.start_time = None;
+    session.ffmpeg_process = None;
+    
+    // Reduced finalization time
+    std::thread::sleep(std::time::Duration::from_millis(500));
     
     Ok(output_path)
 }
@@ -149,53 +205,5 @@ pub fn stop_screen_recording() -> Result<String, String> {
 pub fn get_recording_status() -> Result<bool, String> {
     let session = RECORDING_SESSION.lock().unwrap();
     Ok(session.is_recording)
-}
-
-#[cfg(windows)]
-pub fn capture_screen_with_ffmpeg(
-    output_path: String,
-    duration_secs: Option<u64>,
-) -> Result<String, String> {
-    use std::process::{Command, Stdio};
-    
-    let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-y"); // Overwrite output file
-    cmd.arg("-f").arg("gdigrab"); // Windows screen capture
-    cmd.arg("-framerate").arg("30");
-    cmd.arg("-i").arg("desktop"); // Capture entire desktop
-    
-    if let Some(duration) = duration_secs {
-        cmd.arg("-t").arg(duration.to_string());
-    }
-    
-    cmd.arg("-c:v").arg("libx264");
-    cmd.arg("-preset").arg("ultrafast");
-    cmd.arg("-crf").arg("23");
-    cmd.arg("-pix_fmt").arg("yuv420p");
-    cmd.arg(&output_path);
-    
-    cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
-    
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped());
-    
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
-    
-    if output.status.success() {
-        Ok(output_path)
-    } else {
-        let error = String::from_utf8_lossy(&output.stderr);
-        Err(format!("FFmpeg error: {}", error))
-    }
-}
-
-#[cfg(not(windows))]
-pub fn capture_screen_with_ffmpeg(
-    _output_path: String,
-    _duration_secs: Option<u64>,
-) -> Result<String, String> {
-    Err("Screen capture is only supported on Windows".to_string())
 }
 
