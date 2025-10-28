@@ -2,8 +2,22 @@ use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 mod screen_capture;
 mod audio_capture;
+
+// Helper function to create a Command that won't show a console window on Windows
+fn create_hidden_command(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
@@ -65,7 +79,7 @@ fn get_file_size(file_path: String) -> Result<u64, String> {
 
 #[tauri::command]
 fn get_video_duration_from_file(video_path: String) -> Result<f64, String> {
-    let output = Command::new("ffprobe")
+    let output = create_hidden_command("ffprobe")
         .arg("-v").arg("error")
         .arg("-show_entries").arg("format=duration")
         .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
@@ -84,7 +98,7 @@ fn get_video_duration_from_file(video_path: String) -> Result<f64, String> {
 
 #[tauri::command]
 fn generate_video_thumbnail(video_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
     cmd.arg("-ss").arg("00:00:01"); // Take frame at 1 second
@@ -115,7 +129,7 @@ fn list_screen_sources() -> Result<Vec<screen_capture::ScreenSource>, String> {
 #[tauri::command]
 fn list_audio_devices() -> Result<Vec<String>, String> {
     // List available audio devices using FFmpeg
-    let output = Command::new("ffmpeg")
+    let output = create_hidden_command("ffmpeg")
         .arg("-list_devices").arg("true")
         .arg("-f").arg("dshow")
         .arg("-i").arg("dummy")
@@ -152,7 +166,7 @@ fn list_audio_devices() -> Result<Vec<String>, String> {
 #[tauri::command]
 fn test_ffmpeg() -> Result<String, String> {
     // Test if FFmpeg is available and working
-    let output = Command::new("ffmpeg")
+    let output = create_hidden_command("ffmpeg")
         .arg("-version")
         .output()
         .map_err(|e| format!("FFmpeg not found or not executable: {}", e))?;
@@ -178,7 +192,7 @@ fn get_recording_status() -> Result<bool, String> {
 
 #[tauri::command]
 fn mux_video_audio(video_path: String, audio_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
     cmd.arg("-i").arg(&audio_path);
@@ -204,7 +218,7 @@ fn mux_video_audio(video_path: String, audio_path: String, output_path: String) 
 
 #[tauri::command]
 fn convert_webm_to_mp4(input_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&input_path);
     cmd.arg("-c:v").arg("libx264");
@@ -293,7 +307,7 @@ fn composite_pip_video(
         }
     };
 
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording (master timeline)
     cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
@@ -400,7 +414,7 @@ fn composite_pip_video(
 
 // Helper function to check if a video file has an audio stream
 fn check_has_audio_stream(file_path: &str) -> bool {
-    let output = Command::new("ffmpeg")
+    let output = create_hidden_command("ffmpeg")
         .arg("-i")
         .arg(file_path)
         .arg("-hide_banner")
@@ -469,7 +483,7 @@ fn export_video(
         
         let path = clip.file_path.replace("\\", "/");
         
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = create_hidden_command("ffmpeg");
         cmd.arg("-y");
         
         // Only add trim if needed
@@ -533,7 +547,7 @@ fn export_video(
         
         let path = clip.file_path.replace("\\", "/");
         
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = create_hidden_command("ffmpeg");
         cmd.arg("-y");
         
         if clip.trim_start > 0.0 {
@@ -583,7 +597,7 @@ fn export_video(
         .map_err(|e| format!("Failed to write concat file: {}", e))?;
     
     // Step 3: Concat all temp files
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-f").arg("concat");
     cmd.arg("-safe").arg("0");

@@ -192,7 +192,12 @@ export default function CombinedRecording() {
   };
 
   const handleDiscardRecording = () => {
-    // Just reset - the recording state will clear
+    // Clear the recording state
+    setRecordingState(prev => ({
+      ...prev,
+      recordingType: null,
+      recordedVideoPath: null
+    }));
     setError(null);
     // Restart preview
     if (selectedCamera) {

@@ -2,6 +2,20 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::process::{Child, Command, Stdio};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+// Helper function to create a Command that won't show a console window on Windows
+fn create_hidden_command(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScreenSource {
     pub id: String,
@@ -124,7 +138,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     
     // Start video recording FIRST (before audio)
     // This way we minimize the delay between them
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_hidden_command("ffmpeg");
     cmd.arg("-y");
     cmd.arg("-f").arg("gdigrab");
     cmd.arg("-draw_mouse").arg("0");
@@ -310,7 +324,7 @@ pub fn stop_screen_recording_process() -> Result<String, String> {
         println!("Video duration: {:.2}s, Audio duration: {:.2}s", video_duration, audio_duration);
         println!("Audio offset: {:.3}s", audio_offset_secs);
         
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = create_hidden_command("ffmpeg");
         cmd.arg("-y");
         
         // Input video
