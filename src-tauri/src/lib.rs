@@ -320,6 +320,14 @@ fn composite_pip_video(
     audio_options: AudioOptions,
     output_path: String
 ) -> Result<String, String> {
+    // First, probe the input files to see which streams they actually have
+    let screen_has_audio = check_has_audio_stream(&screen_path);
+    let webcam_has_audio = check_has_audio_stream(&webcam_path);
+    
+    // Adjust audio options based on what's actually available
+    let use_screen_audio = audio_options.include_system_audio && screen_has_audio;
+    let use_webcam_audio = audio_options.include_mic_audio && webcam_has_audio;
+    
     // Calculate PiP dimensions based on size
     let (pip_width, pip_height) = match pip_config.size.as_str() {
         "small" => (320, 180),   // ~16.7% of 1920x1080
@@ -342,8 +350,8 @@ fn composite_pip_video(
     cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording
     cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
     
-    // Handle different audio combinations
-    if audio_options.include_system_audio && audio_options.include_mic_audio {
+    // Handle different audio combinations based on what's actually available
+    if use_screen_audio && use_webcam_audio {
         // Both system audio (from screen) and mic audio (from webcam)
         let filter_complex = format!(
             "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout];[0:a][1:a]amix=inputs=2:duration=longest[aout]",
@@ -352,7 +360,7 @@ fn composite_pip_video(
         cmd.arg("-filter_complex").arg(&filter_complex);
         cmd.arg("-map").arg("[vout]");
         cmd.arg("-map").arg("[aout]");
-    } else if audio_options.include_system_audio {
+    } else if use_screen_audio {
         // System audio only (from screen)
         let filter_complex = format!(
             "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
@@ -361,7 +369,7 @@ fn composite_pip_video(
         cmd.arg("-filter_complex").arg(&filter_complex);
         cmd.arg("-map").arg("[vout]");
         cmd.arg("-map").arg("0:a"); // Screen audio
-    } else if audio_options.include_mic_audio {
+    } else if use_webcam_audio {
         // Mic audio only (from webcam)
         let filter_complex = format!(
             "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}[vout]",
@@ -385,7 +393,7 @@ fn composite_pip_video(
     cmd.arg("-preset").arg("fast");
     cmd.arg("-crf").arg("23");
     
-    if audio_options.include_system_audio || audio_options.include_mic_audio {
+    if use_screen_audio || use_webcam_audio {
         cmd.arg("-c:a").arg("aac");
         cmd.arg("-b:a").arg("192k");
     }
@@ -405,6 +413,23 @@ fn composite_pip_video(
     } else {
         let error = String::from_utf8_lossy(&output.stderr);
         Err(format!("FFmpeg composite error: {}", error))
+    }
+}
+
+// Helper function to check if a video file has an audio stream
+fn check_has_audio_stream(file_path: &str) -> bool {
+    let output = Command::new("ffmpeg")
+        .arg("-i")
+        .arg(file_path)
+        .arg("-hide_banner")
+        .output();
+    
+    if let Ok(output) = output {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Look for "Audio:" in the output which indicates an audio stream
+        stderr.contains("Audio:")
+    } else {
+        false
     }
 }
 
