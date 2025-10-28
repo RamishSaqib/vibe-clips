@@ -21,9 +21,10 @@ async fn export_video(
     clips: Vec<ClipData>,
     output_path: String,
 ) -> Result<String, String> {
-    println!("\n\n\n========== EXPORT CALLED ==========");
-    println!("Clips count: {}", clips.len());
-    println!("Output path: {}", output_path);
+    // Log to file to avoid terminal spam
+    let log_msg = format!("\n\n========== EXPORT CALLED ==========\nClips count: {}\nOutput path: {}\n", 
+                          clips.len(), output_path);
+    let _ = std::fs::write("export_debug.log", log_msg);
     
     if clips.is_empty() {
         println!("ERROR: No clips");
