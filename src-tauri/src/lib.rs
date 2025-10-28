@@ -25,20 +25,52 @@ async fn export_video(
     let mut sorted_clips = clips.clone();
     sorted_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
     
-    // Build filter_complex for trimming and concatenating
-    let mut inputs = Vec::new();
+    // Build FFmpeg command with filters
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("warning");
+    
+    // If only one clip, use simple trimming
+    if sorted_clips.len() == 1 {
+        let clip = &sorted_clips[0];
+        let path = clip.file_path.replace("\\", "/");
+        
+        cmd.arg("-i").arg(&path);
+        cmd.arg("-ss").arg(&format!("{:.6}", clip.trim_start));
+        cmd.arg("-t").arg(&format!("{:.6}", clip.duration));
+        
+        // Codecs
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg("medium");
+        cmd.arg("-c:a").arg("copy");
+        
+        cmd.arg("-y");
+        cmd.arg(&output_path);
+        
+        println!("Single clip export command: {:?}", cmd);
+        
+        let output = cmd.output()
+            .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
+        
+        if output.status.success() {
+            return Ok(format!("Video exported successfully to {}", output_path));
+        } else {
+            let error = String::from_utf8_lossy(&output.stderr);
+            println!("FFmpeg stderr: {}", error);
+            return Err(format!("FFmpeg export failed: {}", error));
+        }
+    }
+    
+    // Multiple clips: use filter_complex for trimming and concatenating
     let mut filter_parts = Vec::new();
-    let mut inputs_str = String::new();
+    let mut filter_inputs = String::new();
     
     for (i, clip) in sorted_clips.iter().enumerate() {
         let path = clip.file_path.replace("\\", "/");
         
-        // Add input
-        inputs.push("-i".to_string());
-        inputs.push(path.clone());
+        cmd.arg("-i").arg(&path);
         
-        // Trim each clip: [i:v]trim=start={trim_start}:duration={duration},setpts=PTS-STARTPTS[v{i}]
-        //                 [i:a]atrim=start={trim_start}:duration={duration},asetpts=PTS-STARTPTS[a{i}]
+        // Trim filters
         let trim_start = clip.trim_start;
         let duration = clip.duration;
         filter_parts.push(format!(
@@ -47,52 +79,40 @@ async fn export_video(
         ));
         
         // Add to concat inputs
-        inputs_str.push_str(&format!("[v{}][a{}]", i, i));
+        filter_inputs.push_str(&format!("[v{}][a{}]", i, i));
         if i < sorted_clips.len() - 1 {
-            inputs_str.push_str(":");
+            filter_inputs.push_str(":");
         }
     }
     
     // Final concat filter
-    filter_parts.push(format!("{}concat=n={}:v=1:a=1[outv][outa]", inputs_str, sorted_clips.len()));
+    filter_parts.push(format!("{}concat=n={}:v=1:a=1[outv][outa]", filter_inputs, sorted_clips.len()));
     
     let filter_complex = filter_parts.join(";");
     
-    println!("Filter complex: {}", filter_complex);
-    
-    // Build FFmpeg command
-    let mut cmd = Command::new("ffmpeg");
-    
-    // Add inputs
-    for arg in inputs {
-        cmd.arg(&arg);
-    }
-    
-    // Add filter
     cmd.arg("-filter_complex").arg(&filter_complex);
-    
-    // Map outputs
     cmd.arg("-map").arg("[outv]");
     cmd.arg("-map").arg("[outa]");
     
-    // Codec options
+    // Codecs
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("medium");
     cmd.arg("-c:a").arg("aac");
     cmd.arg("-b:a").arg("192k");
     
-    // Overwrite output
     cmd.arg("-y");
     cmd.arg(&output_path);
     
-    println!("Running FFmpeg...");
-    let ffmpeg_cmd = cmd.output()
+    println!("Filter complex: {}", filter_complex);
+    println!("Running FFmpeg with multiple clips...");
+    
+    let output = cmd.output()
         .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
     
-    if ffmpeg_cmd.status.success() {
+    if output.status.success() {
         Ok(format!("Video exported successfully to {}", output_path))
     } else {
-        let error = String::from_utf8_lossy(&ffmpeg_cmd.stderr);
+        let error = String::from_utf8_lossy(&output.stderr);
         println!("FFmpeg stderr: {}", error);
         Err(format!("FFmpeg export failed: {}", error))
     }
