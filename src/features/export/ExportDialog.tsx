@@ -23,6 +23,12 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       return;
     }
 
+    // Validate output path has a filename
+    if (!outputPath.endsWith('.mp4') && !outputPath.endsWith('.mov')) {
+      alert('Please select a filename ending in .mp4 or .mov');
+      return;
+    }
+
     if (clips.length === 0) {
       alert('No clips to export');
       return;
