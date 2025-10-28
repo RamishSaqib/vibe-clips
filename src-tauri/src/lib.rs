@@ -1,6 +1,6 @@
 use tauri::{Emitter, Listener};
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
@@ -28,7 +28,8 @@ async fn export_video(
     // Build FFmpeg command with filters
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("warning");
+    cmd.arg("-loglevel").arg("error");
+    cmd.arg("-nostats");
     
     // If only one clip, use simple trimming
     if sorted_clips.len() == 1 {
@@ -48,6 +49,9 @@ async fn export_video(
         cmd.arg(&output_path);
         
         println!("Single clip export command: {:?}", cmd);
+        
+        cmd.stderr(Stdio::piped());
+        cmd.stdout(Stdio::piped());
         
         let output = cmd.output()
             .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
@@ -105,6 +109,9 @@ async fn export_video(
     
     println!("Filter complex: {}", filter_complex);
     println!("Running FFmpeg with multiple clips...");
+    
+    cmd.stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped());
     
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
