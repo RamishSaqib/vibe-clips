@@ -6,6 +6,7 @@ interface TimelineContextType {
   setTimelineState: React.Dispatch<React.SetStateAction<TimelineState>>;
   removeClipsByVideoId: (videoFileId: string) => void;
   splitClipAtPlayhead: (clipId: string, playheadPosition: number) => void;
+  deleteClip: (clipId: string) => void;
 }
 
 const TimelineContext = createContext<TimelineContextType | undefined>(undefined);
@@ -120,8 +121,42 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const deleteClip = (clipId: string) => {
+    setTimelineState(prev => {
+      const clipToDelete = prev.clips.find(c => c.id === clipId);
+      if (!clipToDelete) return prev;
+
+      // Remove the clip
+      const remainingClips = prev.clips.filter(clip => clip.id !== clipId);
+      
+      // Calculate the new maximum timeline duration
+      const maxTime = remainingClips.length > 0 
+        ? Math.max(...remainingClips.map(c => c.startTime + c.duration))
+        : 0;
+      
+      // If playhead is on the deleted clip, reposition it to the clip's start time
+      let newPlayheadPosition = prev.playheadPosition;
+      if (prev.playheadPosition >= clipToDelete.startTime && 
+          prev.playheadPosition < clipToDelete.startTime + clipToDelete.duration) {
+        newPlayheadPosition = clipToDelete.startTime;
+      }
+      
+      // If playhead is beyond the new timeline end, reset it
+      if (newPlayheadPosition > maxTime) {
+        newPlayheadPosition = maxTime;
+      }
+      
+      return {
+        ...prev,
+        clips: remainingClips,
+        playheadPosition: newPlayheadPosition,
+        selectedClipId: prev.selectedClipId === clipId ? null : prev.selectedClipId,
+      };
+    });
+  };
+
   return (
-    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead }}>
+    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead, deleteClip }}>
       {children}
     </TimelineContext.Provider>
   );
