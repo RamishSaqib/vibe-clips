@@ -118,46 +118,49 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         return Err("Output path must end with .mp4".to_string());
     }
     
-    // Try to capture with WASAPI loopback (system audio)
-    // This captures all audio playing through the default audio device
-    let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-y"); // Overwrite output file
+    // Try different audio loopback device names (try each until one works)
+    let audio_devices = vec![
+        "virtual-audio-capturer",
+        "Stereo Mix",
+        "Wave Out Mix", 
+        "CABLE Output",
+        "Loopback"
+    ];
     
-    // Video input: screen capture
-    cmd.arg("-f").arg("gdigrab");
-    cmd.arg("-draw_mouse").arg("0"); // Don't draw mouse cursor to avoid flickering
-    cmd.arg("-framerate").arg("30");
-    cmd.arg("-i").arg("desktop");
+    let mut child = None;
     
-    // Audio input: WASAPI loopback (captures system audio)
-    // This uses DirectShow to access the audio loopback device
-    cmd.arg("-f").arg("dshow");
-    cmd.arg("-i").arg("audio=virtual-audio-capturer");
+    // Try each audio device
+    for audio_device in &audio_devices {
+        let mut cmd = Command::new("ffmpeg");
+        cmd.arg("-y");
+        cmd.arg("-f").arg("gdigrab");
+        cmd.arg("-draw_mouse").arg("0");
+        cmd.arg("-framerate").arg("30");
+        cmd.arg("-i").arg("desktop");
+        cmd.arg("-f").arg("dshow");
+        cmd.arg("-i").arg(format!("audio={}", audio_device));
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg("ultrafast");
+        cmd.arg("-crf").arg("23");
+        cmd.arg("-pix_fmt").arg("yuv420p");
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+        cmd.arg("-movflags").arg("faststart");
+        cmd.arg(&output_path);
+        cmd.arg("-hide_banner");
+        cmd.arg("-loglevel").arg("error");
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::piped());
+        
+        if let Ok(c) = cmd.spawn() {
+            child = Some(c);
+            break;
+        }
+    }
     
-    // Video encoding
-    cmd.arg("-c:v").arg("libx264");
-    cmd.arg("-preset").arg("ultrafast");
-    cmd.arg("-crf").arg("23");
-    cmd.arg("-pix_fmt").arg("yuv420p");
-    
-    // Audio encoding
-    cmd.arg("-c:a").arg("aac");
-    cmd.arg("-b:a").arg("192k");
-    
-    cmd.arg("-movflags").arg("faststart");
-    cmd.arg(&output_path);
-    cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("error");
-    
-    // Keep stdin open so we can send 'q' to stop gracefully
-    cmd.stdin(Stdio::piped());
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped()); // Capture stderr
-    
-    let mut child = cmd.spawn();
-    
-    // If audio capture fails, try again without audio
-    if child.is_err() {
+    // If all audio devices failed, try video-only
+    if child.is_none() {
         let mut cmd_no_audio = Command::new("ffmpeg");
         cmd_no_audio.arg("-y");
         cmd_no_audio.arg("-f").arg("gdigrab");
@@ -176,10 +179,11 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         cmd_no_audio.stdout(Stdio::null());
         cmd_no_audio.stderr(Stdio::piped());
         
-        child = cmd_no_audio.spawn();
+        child = Some(cmd_no_audio.spawn()
+            .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?);
     }
     
-    let child = child.map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
+    let child = child.ok_or("Failed to start recording")?;
     let pid = child.id();
     
     // Store the child process
@@ -191,7 +195,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
     
-    Ok(format!("Recording started with system audio (PID: {})", pid))
+    Ok(format!("Recording started (PID: {})", pid))
 }
 
 #[cfg(not(windows))]
