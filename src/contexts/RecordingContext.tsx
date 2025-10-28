@@ -506,20 +506,22 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
         // Wait for both files to be ready (webcam conversion + screen finalization)
         // Poll for file existence with timeout
-        const waitForFile = async (filePath: string, maxWaitMs: number = 5000) => {
+        const waitForFile = async (filePath: string, maxWaitMs: number = 10000) => {
           const startTime = Date.now();
           while (Date.now() - startTime < maxWaitMs) {
             try {
               const size = await invoke<number>('get_file_size', { filePath });
               if (size > 0) {
+                console.log(`File ready: ${filePath} (${size} bytes)`);
                 return true;
               }
             } catch (e) {
               // File doesn't exist yet, wait and retry
+              console.log(`Waiting for file: ${filePath}`);
             }
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
-          throw new Error(`File not ready: ${filePath}`);
+          throw new Error(`File not ready after ${maxWaitMs}ms: ${filePath}`);
         };
 
         console.log('Waiting for screen recording:', screenPath);

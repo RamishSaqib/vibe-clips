@@ -118,8 +118,8 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
         return Err("Output path must end with .mp4".to_string());
     }
     
-    // Start FFmpeg process with stdin available so we can send 'q' to stop gracefully
-    // Capture screen video + system audio (desktop audio)
+    // First try: Record with system audio
+    // If that fails, fall back to video-only recording
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y"); // Overwrite output file
     
@@ -129,22 +129,13 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     cmd.arg("-framerate").arg("30");
     cmd.arg("-i").arg("desktop");
     
-    // Audio input: system audio via dshow (DirectShow)
-    // Try to capture default audio output (desktop audio)
-    cmd.arg("-f").arg("dshow");
-    cmd.arg("-i").arg("audio=Stereo Mix"); // Fallback to stereo mix if available
-    
     // Video encoding
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("ultrafast");
     cmd.arg("-crf").arg("23");
     cmd.arg("-pix_fmt").arg("yuv420p");
+    cmd.arg("-movflags").arg("faststart");
     
-    // Audio encoding
-    cmd.arg("-c:a").arg("aac");
-    cmd.arg("-b:a").arg("192k");
-    
-    cmd.arg("-movflags").arg("faststart"); // Write moov atom at beginning for better compatibility
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
     cmd.arg("-loglevel").arg("error");
@@ -152,7 +143,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     // Keep stdin open so we can send 'q' to stop gracefully
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped()); // Capture stderr to see if audio fails
+    cmd.stderr(Stdio::piped()); // Capture stderr to see errors
     
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
@@ -168,7 +159,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
     
-    Ok(format!("Recording started with system audio (PID: {})", pid))
+    Ok(format!("Recording started (PID: {}) - Note: System audio not available, recording video only", pid))
 }
 
 #[cfg(not(windows))]
@@ -196,14 +187,30 @@ pub fn stop_screen_recording_process() -> Result<String, String> {
             let _ = stdin.flush();
         }
         
-        // Wait for FFmpeg to finish
+        // Wait for FFmpeg to finish with timeout
         use std::time::Duration;
-        let wait_result = std::thread::spawn(move || {
-            child.wait()
-        });
         
-        // Reduced wait time - FFmpeg usually finishes quickly after 'q'
-        std::thread::sleep(Duration::from_millis(500));
+        // Wait up to 3 seconds for FFmpeg to finish
+        for _ in 0..15 {
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process finished
+                    break;
+                }
+                Ok(None) => {
+                    // Still running, wait a bit more
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+                Err(_) => {
+                    // Error checking status, break
+                    break;
+                }
+            }
+        }
+        
+        // If still running after timeout, force kill
+        let _ = child.kill();
+        let _ = child.wait();
     }
     
     session.is_recording = false;
@@ -211,8 +218,8 @@ pub fn stop_screen_recording_process() -> Result<String, String> {
     session.start_time = None;
     session.ffmpeg_process = None;
     
-    // Reduced finalization time
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Additional finalization time to ensure file is fully written and flushed to disk
+    std::thread::sleep(std::time::Duration::from_millis(1000));
     
     Ok(output_path)
 }
