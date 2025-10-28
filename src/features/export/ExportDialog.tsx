@@ -178,13 +178,10 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
 
         {isExporting && (
           <div className="export-progress">
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${progress}%` }}
-              />
+            <div className="export-spinner">
+              <div className="spinner"></div>
             </div>
-            <p>{progress}%</p>
+            <p>Exporting video... This may take a moment.</p>
           </div>
         )}
       </div>
