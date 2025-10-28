@@ -123,9 +123,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       // Check if there are trimmed portions
       const hasLeftTrim = clip.trimStart > 0;
       const hasRightTrim = clip.trimEnd < video.duration;
+      
+      // For split clips, NEVER show the hatching pattern
+      const fullClipStartTime = clip.startTime - clip.trimStart;
+      
+      // Don't show hatching - always show clips as independent entities
+      const showAsFullClip = false;
+      const canExtendLeft = false;
+      const canExtendRight = false;
 
       // Draw trimmed regions with hatching pattern for better distinction
-      if (hasLeftTrim) {
+      if (canExtendLeft) {
         const leftTrimWidth = clip.trimStart * PIXELS_PER_SECOND * state.zoom;
         const leftTrimX = clipX - leftTrimWidth;
         
@@ -151,7 +159,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
         ctx.restore();
       }
 
-      if (hasRightTrim) {
+      if (canExtendRight) {
         const rightTrimStart = clipX + clipWidth;
         const rightTrimDuration = video.duration - clip.trimEnd;
         const rightTrimWidth = rightTrimDuration * PIXELS_PER_SECOND * state.zoom;
@@ -182,91 +190,100 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.fillStyle = isSelected ? '#4a9eff' : '#3a3a3a';
       ctx.fillRect(clipX, clipY, clipWidth, clipHeight);
 
-      // Clip border
+      // Clip border - only show border around visible clip (independent clip style)
       ctx.strokeStyle = isSelected ? '#6bb5ff' : '#555';
       ctx.lineWidth = 2;
-      
-      const fullClipStartTime = clip.startTime - clip.trimStart;
-      const fullX = fullClipStartTime * PIXELS_PER_SECOND * state.zoom;
-      const fullWidth = video.duration * PIXELS_PER_SECOND * state.zoom;
-      
-      ctx.strokeRect(fullX, clipY, fullWidth, clipHeight);
+      ctx.strokeRect(clipX, clipY, clipWidth, clipHeight);
 
-      // Draw trim handles for selected clips
-      if (isSelected) {
-        const handleWidth = 14; // Increased from 10
-        const isLeftHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'left';
-        const isRightHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'right';
-        
-        // Left trim handle (at the start of visible clip)
-        const leftHandleX = clipX - handleWidth/2;
-        
-        // Draw handle shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(leftHandleX + 2, clipY + 2, handleWidth, clipHeight);
-        
-        // Draw handle with gradient effect
-        const leftGradient = ctx.createLinearGradient(leftHandleX, 0, leftHandleX + handleWidth, 0);
-        if (isLeftHovered) {
-          leftGradient.addColorStop(0, '#ffe55c');
-          leftGradient.addColorStop(1, '#ffd700');
-        } else {
-          leftGradient.addColorStop(0, '#ffd700');
-          leftGradient.addColorStop(1, '#ffb700');
-        }
-        ctx.fillStyle = leftGradient;
-        ctx.fillRect(leftHandleX, clipY, handleWidth, clipHeight);
-        
-        // Handle border with rounded corners effect
-        ctx.strokeStyle = isLeftHovered ? '#fff' : '#ffed4e';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(leftHandleX, clipY, handleWidth, clipHeight);
-        
-        // Add grip lines for better affordance
-        ctx.strokeStyle = isLeftHovered ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.3)';
-        ctx.lineWidth = 1;
-        const gripSpacing = clipHeight / 4;
-        for (let i = 1; i < 4; i++) {
-          ctx.beginPath();
-          ctx.moveTo(leftHandleX + 3, clipY + gripSpacing * i);
-          ctx.lineTo(leftHandleX + handleWidth - 3, clipY + gripSpacing * i);
-          ctx.stroke();
-        }
-        
-        // Right trim handle (at the end of visible clip)
-        const rightHandleX = clipX + clipWidth - handleWidth/2;
-        
-        // Draw handle shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(rightHandleX + 2, clipY + 2, handleWidth, clipHeight);
-        
-        // Draw handle with gradient effect
-        const rightGradient = ctx.createLinearGradient(rightHandleX, 0, rightHandleX + handleWidth, 0);
-        if (isRightHovered) {
-          rightGradient.addColorStop(0, '#ffe55c');
-          rightGradient.addColorStop(1, '#ffd700');
-        } else {
-          rightGradient.addColorStop(0, '#ffd700');
-          rightGradient.addColorStop(1, '#ffb700');
-        }
-        ctx.fillStyle = rightGradient;
-        ctx.fillRect(rightHandleX, clipY, handleWidth, clipHeight);
-        
-        // Handle border
-        ctx.strokeStyle = isRightHovered ? '#fff' : '#ffed4e';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rightHandleX, clipY, handleWidth, clipHeight);
-        
-        // Add grip lines
-        ctx.strokeStyle = isRightHovered ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.3)';
-        ctx.lineWidth = 1;
-        for (let i = 1; i < 4; i++) {
-          ctx.beginPath();
-          ctx.moveTo(rightHandleX + 3, clipY + gripSpacing * i);
-          ctx.lineTo(rightHandleX + handleWidth - 3, clipY + gripSpacing * i);
-          ctx.stroke();
-        }
+      // Draw trim handles for ALL clips (not just selected)
+      // This makes it clear each clip is independent and editable
+      const handleWidth = 8; // Reduced from 14 to prevent overlap
+      const isLeftHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'left';
+      const isRightHovered = hoveredHandle?.clipId === clip.id && hoveredHandle?.handle === 'right';
+      
+      // Make handles more subtle for non-selected clips
+      const handleOpacity = isSelected ? 1.0 : 0.6;
+      
+      // Left trim handle (at the start of visible clip) - inside the clip edge
+      const leftHandleX = clipX;
+      
+      // Draw handle shadow for depth
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.3 * handleOpacity})`;
+      ctx.fillRect(leftHandleX + 2, clipY + 2, handleWidth, clipHeight);
+      
+      // Draw handle with gradient effect
+      const leftGradient = ctx.createLinearGradient(leftHandleX, 0, leftHandleX + handleWidth, 0);
+      if (isLeftHovered || isSelected) {
+        leftGradient.addColorStop(0, '#ffe55c');
+        leftGradient.addColorStop(1, '#ffd700');
+      } else {
+        leftGradient.addColorStop(0, '#ccaa00');
+        leftGradient.addColorStop(1, '#aa8800');
       }
+      ctx.fillStyle = leftGradient;
+      ctx.globalAlpha = handleOpacity;
+      ctx.fillRect(leftHandleX, clipY, handleWidth, clipHeight);
+      ctx.globalAlpha = 1.0;
+      
+      // Handle border
+      ctx.strokeStyle = (isLeftHovered || isSelected) ? '#fff' : '#ffed4e';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = handleOpacity;
+      ctx.strokeRect(leftHandleX, clipY, handleWidth, clipHeight);
+      ctx.globalAlpha = 1.0;
+      
+      // Add grip lines for better affordance
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * handleOpacity})`;
+      ctx.lineWidth = 1;
+      const gripSpacing = clipHeight / 4;
+      ctx.globalAlpha = handleOpacity;
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(leftHandleX + 2, clipY + gripSpacing * i);
+        ctx.lineTo(leftHandleX + handleWidth - 2, clipY + gripSpacing * i);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+      
+      // Right trim handle (at the end of visible clip) - inside the clip edge
+      const rightHandleX = clipX + clipWidth - handleWidth;
+      
+      // Draw handle shadow for depth
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.3 * handleOpacity})`;
+      ctx.fillRect(rightHandleX + 2, clipY + 2, handleWidth, clipHeight);
+      
+      // Draw handle with gradient effect
+      const rightGradient = ctx.createLinearGradient(rightHandleX, 0, rightHandleX + handleWidth, 0);
+      if (isRightHovered || isSelected) {
+        rightGradient.addColorStop(0, '#ffe55c');
+        rightGradient.addColorStop(1, '#ffd700');
+      } else {
+        rightGradient.addColorStop(0, '#ccaa00');
+        rightGradient.addColorStop(1, '#aa8800');
+      }
+      ctx.fillStyle = rightGradient;
+      ctx.globalAlpha = handleOpacity;
+      ctx.fillRect(rightHandleX, clipY, handleWidth, clipHeight);
+      ctx.globalAlpha = 1.0;
+      
+      // Handle border
+      ctx.strokeStyle = (isRightHovered || isSelected) ? '#fff' : '#ffed4e';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = handleOpacity;
+      ctx.strokeRect(rightHandleX, clipY, handleWidth, clipHeight);
+      ctx.globalAlpha = 1.0;
+      
+      // Add grip lines
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * handleOpacity})`;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = handleOpacity;
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(rightHandleX + 2, clipY + gripSpacing * i);
+        ctx.lineTo(rightHandleX + handleWidth - 2, clipY + gripSpacing * i);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
 
       // Clip label
       if (clipWidth > 40) {
