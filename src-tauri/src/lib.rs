@@ -90,9 +90,9 @@ async fn export_video(
         
         cmd.arg(&output_path);
         
-        println!("Executing FFmpeg...");
-        println!("Input file: '{}'", path);
-        println!("Output file: '{}'", output_path);
+        // Write to a log file to avoid terminal spam
+        let log_msg = format!("Exporting: input='{}' output='{}'\n", path, output_path);
+        let _ = std::fs::write("export.log", log_msg);
         
         // Redirect ALL output to null to prevent spam
         cmd.stdout(Stdio::null());
