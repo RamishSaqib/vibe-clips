@@ -91,8 +91,8 @@ async fn export_video(
         cmd.arg(&output_path);
         
         println!("Executing FFmpeg...");
-        println!("Input file: {}", path);
-        println!("Output file: {}", output_path);
+        println!("Input file: '{}'", path);
+        println!("Output file: '{}'", output_path);
         
         // Capture stderr to get error messages
         cmd.stdout(Stdio::null());
