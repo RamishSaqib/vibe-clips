@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { RecordingState, ScreenSource } from '../types/recording';
+import type { RecordingState, ScreenSource, PiPConfig } from '../types/recording';
 import { useVideos } from './VideoContext';
 import { useTimeline } from './TimelineContext';
 import type { VideoFile } from '../types/video';
@@ -11,8 +11,18 @@ interface RecordingContextType {
   recordingState: RecordingState;
   startScreenRecording: (source: ScreenSource) => Promise<void>;
   startWebcamRecording: (deviceId: string, resolution: { width: number; height: number }) => Promise<void>;
+  startCombinedRecording: (
+    source: ScreenSource, 
+    deviceId: string, 
+    resolution: { width: number; height: number },
+    pipConfig: PiPConfig
+  ) => Promise<void>;
   stopRecording: () => Promise<void>;
-  saveRecording: (addToTimeline: boolean) => Promise<void>;
+  saveRecording: (addToTimeline: boolean, saveOptions?: {
+    saveScreen?: boolean;
+    saveWebcam?: boolean;
+    saveComposite?: boolean;
+  }) => Promise<void>;
   listScreenSources: () => Promise<ScreenSource[]>;
 }
 
@@ -28,6 +38,9 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     audioBlob: null,
     videoPath: null,
     selectedScreenSource: null,
+    webcamPath: null,
+    screenPath: null,
+    pipConfig: null,
   });
 
   const { addVideo } = useVideos();
@@ -213,12 +226,125 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         audioBlob: null,
         videoPath: webmPath,
         selectedScreenSource: null,
+        webcamPath: null,
+        screenPath: null,
+        pipConfig: null,
       });
     } catch (error) {
       console.error('Failed to start webcam recording:', error);
       throw error;
     }
   }, []);
+
+  const startCombinedRecording = useCallback(async (
+    source: ScreenSource, 
+    deviceId: string, 
+    resolution: { width: number; height: number },
+    pipConfig: PiPConfig
+  ) => {
+    try {
+      // Get temp directory from Rust
+      let tempDir = await invoke<string>('get_temp_dir');
+      // Remove trailing backslash if present
+      tempDir = tempDir.replace(/[\\\/]$/, '');
+      
+      const timestamp = Date.now();
+      const screenPath = `${tempDir}\\combined_screen_${timestamp}.mp4`;
+      const webcamWebmPath = `${tempDir}\\combined_webcam_${timestamp}.webm`;
+      const webcamPath = `${tempDir}\\combined_webcam_${timestamp}.mp4`;
+      const compositePath = `${tempDir}\\combined_composite_${timestamp}.mp4`;
+
+      // Start screen recording via Rust
+      await invoke('start_screen_recording_async', { 
+        outputPath: screenPath
+      });
+
+      // Start webcam recording via MediaRecorder
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: resolution.width },
+          height: { ideal: resolution.height }
+        },
+        audio: false // Don't capture webcam audio for combined recording (screen audio is enough)
+      });
+
+      setWebcamStream(stream);
+
+      // Create MediaRecorder
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+      
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const webmBlob = new Blob(chunks, { type: 'video/webm' });
+        
+        // Save WebM to temp file
+        const reader = new FileReader();
+        reader.readAsDataURL(webmBlob);
+        reader.onloadend = async () => {
+          const dataUrl = reader.result as string;
+          const savedWebmPath = await invoke<string>('save_temp_video', { dataUrl });
+          
+          // Convert WebM to MP4
+          try {
+            await invoke('convert_webm_to_mp4', {
+              inputPath: savedWebmPath,
+              outputPath: webcamPath
+            });
+            
+            // Update state with converted webcam path
+            setRecordingState(prev => ({
+              ...prev,
+              webcamPath,
+            }));
+          } catch (err) {
+            console.error('Failed to convert webcam recording:', err);
+          }
+        };
+      };
+
+      recorder.start();
+      setWebcamRecorder(recorder);
+      setWebcamChunks(chunks);
+
+      setRecordingState({
+        isRecording: true,
+        recordingType: 'combined',
+        duration: 0,
+        startTime: Date.now(),
+        outputPath: compositePath,
+        audioBlob: null,
+        videoPath: null,
+        selectedScreenSource: source,
+        webcamPath,
+        screenPath,
+        pipConfig,
+      });
+    } catch (error) {
+      console.error('Failed to start combined recording:', error);
+      // Cleanup on error
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        setWebcamStream(null);
+      }
+      try {
+        await invoke('stop_screen_recording_async');
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }, [webcamStream]);
 
   const stopRecording = useCallback(async () => {
     if (!recordingState.isRecording) return;
@@ -252,6 +378,26 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           ...prev,
           isRecording: false,
         }));
+      } else if (recordingState.recordingType === 'combined') {
+        // Stop screen recording
+        const screenPath = await invoke<string>('stop_screen_recording_async');
+
+        // Stop webcam recorder
+        if (webcamRecorder && webcamRecorder.state !== 'inactive') {
+          webcamRecorder.stop();
+        }
+        
+        // Stop webcam stream
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+          setWebcamStream(null);
+        }
+
+        setRecordingState(prev => ({
+          ...prev,
+          isRecording: false,
+          screenPath, // Update with actual path from stop command
+        }));
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
@@ -259,67 +405,215 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }
   }, [recordingState.isRecording, recordingState.recordingType, stopAudioRecording, webcamRecorder, webcamStream]);
 
-  const saveRecording = useCallback(async (addToTimeline: boolean) => {
-    const { videoPath, audioBlob, outputPath, recordingType } = recordingState;
+  const saveRecording = useCallback(async (addToTimeline: boolean, saveOptions?: {
+    saveScreen?: boolean;
+    saveWebcam?: boolean;
+    saveComposite?: boolean;
+  }) => {
+    const { videoPath, audioBlob, outputPath, recordingType, screenPath, webcamPath, pipConfig } = recordingState;
 
-    if (!videoPath || !outputPath) {
-      throw new Error('No recording to save');
-    }
+    // Default save options
+    const options = {
+      saveScreen: saveOptions?.saveScreen ?? false,
+      saveWebcam: saveOptions?.saveWebcam ?? false,
+      saveComposite: saveOptions?.saveComposite ?? true, // Always save composite by default
+    };
 
     try {
-      let finalPath = videoPath;
+      const savedVideos: VideoFile[] = [];
 
-      // For webcam recordings, convert WebM to MP4
-      if (recordingType === 'webcam') {
+      // Handle screen-only recording
+      if (recordingType === 'screen') {
+        if (!videoPath || !outputPath) {
+          throw new Error('No recording to save');
+        }
+
+        let finalPath = videoPath;
+        
+        // Get actual file size
+        const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
+        
+        // Generate thumbnail
+        const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
+        let thumbnail: string | undefined;
+        try {
+          await invoke('generate_video_thumbnail', { 
+            videoPath: finalPath, 
+            outputPath: thumbnailPath 
+          });
+          thumbnail = thumbnailPath;
+        } catch (err) {
+          console.warn('Failed to generate thumbnail:', err);
+        }
+        
+        const videoFile: VideoFile = {
+          id: `recording_${Date.now()}`,
+          path: finalPath,
+          filename: finalPath.split('\\').pop() || 'recording.mp4',
+          duration: recordingState.duration,
+          size: fileSize,
+          resolution: { width: 1920, height: 1080 },
+          thumbnail,
+        };
+
+        savedVideos.push(videoFile);
+      }
+
+      // Handle webcam-only recording
+      else if (recordingType === 'webcam') {
+        if (!videoPath || !outputPath) {
+          throw new Error('No recording to save');
+        }
+
+        let finalPath = videoPath;
+
+        // Convert WebM to MP4
         await invoke('convert_webm_to_mp4', {
           inputPath: videoPath,
           outputPath
         });
         finalPath = outputPath;
-      }
-      
-      // Get actual file size
-      const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
-      
-      // Generate thumbnail
-      const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
-      let thumbnail: string | undefined;
-      try {
-        await invoke('generate_video_thumbnail', { 
-          videoPath: finalPath, 
-          outputPath: thumbnailPath 
-        });
-        thumbnail = thumbnailPath;
-      } catch (err) {
-        console.warn('Failed to generate thumbnail:', err);
-        // Continue without thumbnail
-      }
-      
-      const videoFile: VideoFile = {
-        id: `recording_${Date.now()}`,
-        path: finalPath,
-        filename: finalPath.split('\\').pop() || 'recording.mp4',
-        duration: recordingState.duration, // Use recorded duration from timer
-        size: fileSize, // Actual file size in bytes
-        resolution: {
-          width: 1920, // Placeholder - will be correct when video plays
-          height: 1080,
-        },
-        thumbnail, // Thumbnail path if generated
-      };
+        
+        // Get actual file size
+        const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
+        
+        // Generate thumbnail
+        const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
+        let thumbnail: string | undefined;
+        try {
+          await invoke('generate_video_thumbnail', { 
+            videoPath: finalPath, 
+            outputPath: thumbnailPath 
+          });
+          thumbnail = thumbnailPath;
+        } catch (err) {
+          console.warn('Failed to generate thumbnail:', err);
+        }
+        
+        const videoFile: VideoFile = {
+          id: `recording_${Date.now()}`,
+          path: finalPath,
+          filename: finalPath.split('\\').pop() || 'recording.mp4',
+          duration: recordingState.duration,
+          size: fileSize,
+          resolution: { width: 1920, height: 1080 },
+          thumbnail,
+        };
 
-      // Add to media library
-      addVideo(videoFile);
+        savedVideos.push(videoFile);
+      }
 
-      // Add to timeline if requested
-      if (addToTimeline) {
+      // Handle combined recording
+      else if (recordingType === 'combined') {
+        if (!screenPath || !webcamPath || !pipConfig || !outputPath) {
+          throw new Error('Combined recording data incomplete');
+        }
+
+        // Wait for webcam conversion to complete (in case it's still processing)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Save screen-only if requested
+        if (options.saveScreen) {
+          const fileSize = await invoke<number>('get_file_size', { filePath: screenPath });
+          const thumbnailPath = screenPath.replace(/\.mp4$/, '_thumb.jpg');
+          let thumbnail: string | undefined;
+          try {
+            await invoke('generate_video_thumbnail', { 
+              videoPath: screenPath, 
+              outputPath: thumbnailPath 
+            });
+            thumbnail = thumbnailPath;
+          } catch (err) {
+            console.warn('Failed to generate screen thumbnail:', err);
+          }
+          
+          const screenVideo: VideoFile = {
+            id: `screen_${Date.now()}`,
+            path: screenPath,
+            filename: screenPath.split('\\').pop() || 'screen.mp4',
+            duration: recordingState.duration,
+            size: fileSize,
+            resolution: { width: 1920, height: 1080 },
+            thumbnail,
+          };
+          savedVideos.push(screenVideo);
+        }
+
+        // Save webcam-only if requested
+        if (options.saveWebcam) {
+          const fileSize = await invoke<number>('get_file_size', { filePath: webcamPath });
+          const thumbnailPath = webcamPath.replace(/\.mp4$/, '_thumb.jpg');
+          let thumbnail: string | undefined;
+          try {
+            await invoke('generate_video_thumbnail', { 
+              videoPath: webcamPath, 
+              outputPath: thumbnailPath 
+            });
+            thumbnail = thumbnailPath;
+          } catch (err) {
+            console.warn('Failed to generate webcam thumbnail:', err);
+          }
+          
+          const webcamVideo: VideoFile = {
+            id: `webcam_${Date.now()}`,
+            path: webcamPath,
+            filename: webcamPath.split('\\').pop() || 'webcam.mp4',
+            duration: recordingState.duration,
+            size: fileSize,
+            resolution: { width: 1920, height: 1080 },
+            thumbnail,
+          };
+          savedVideos.push(webcamVideo);
+        }
+
+        // Create composite PiP video if requested
+        if (options.saveComposite) {
+          await invoke('composite_pip_video', {
+            screenPath,
+            webcamPath,
+            pipConfig,
+            outputPath
+          });
+
+          const fileSize = await invoke<number>('get_file_size', { filePath: outputPath });
+          const thumbnailPath = outputPath.replace(/\.mp4$/, '_thumb.jpg');
+          let thumbnail: string | undefined;
+          try {
+            await invoke('generate_video_thumbnail', { 
+              videoPath: outputPath, 
+              outputPath: thumbnailPath 
+            });
+            thumbnail = thumbnailPath;
+          } catch (err) {
+            console.warn('Failed to generate composite thumbnail:', err);
+          }
+          
+          const compositeVideo: VideoFile = {
+            id: `composite_${Date.now()}`,
+            path: outputPath,
+            filename: outputPath.split('\\').pop() || 'combined.mp4',
+            duration: recordingState.duration,
+            size: fileSize,
+            resolution: { width: 1920, height: 1080 },
+            thumbnail,
+          };
+          savedVideos.push(compositeVideo);
+        }
+      }
+
+      // Add all saved videos to media library
+      savedVideos.forEach(video => addVideo(video));
+
+      // Add to timeline if requested (only the first/primary video)
+      if (addToTimeline && savedVideos.length > 0) {
+        const primaryVideo = savedVideos[savedVideos.length - 1]; // Use composite or latest video
         const newClip: TimelineClip = {
           id: `clip_${Date.now()}`,
-          videoFileId: videoFile.id,
+          videoFileId: primaryVideo.id,
           startTime: timelineState.playheadPosition,
-          duration: videoFile.duration,
+          duration: primaryVideo.duration,
           trimStart: 0,
-          trimEnd: videoFile.duration,
+          trimEnd: primaryVideo.duration,
           track: 0,
         };
 
@@ -339,6 +633,9 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         audioBlob: null,
         videoPath: null,
         selectedScreenSource: null,
+        webcamPath: null,
+        screenPath: null,
+        pipConfig: null,
       });
     } catch (error) {
       console.error('Failed to save recording:', error);
@@ -352,6 +649,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         recordingState,
         startScreenRecording,
         startWebcamRecording,
+        startCombinedRecording,
         stopRecording,
         saveRecording,
         listScreenSources,

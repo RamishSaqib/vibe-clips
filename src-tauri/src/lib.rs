@@ -163,6 +163,75 @@ fn convert_webm_to_mp4(input_path: String, output_path: String) -> Result<String
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PiPConfig {
+    position: String, // "top-left" | "top-right" | "bottom-left" | "bottom-right"
+    size: String,     // "small" | "medium" | "large"
+    padding: u32,     // Padding from edges in pixels
+}
+
+#[tauri::command]
+fn composite_pip_video(
+    screen_path: String, 
+    webcam_path: String, 
+    pip_config: PiPConfig,
+    output_path: String
+) -> Result<String, String> {
+    // Calculate PiP dimensions based on size
+    let (pip_width, pip_height) = match pip_config.size.as_str() {
+        "small" => (320, 180),   // ~16.7% of 1920x1080
+        "medium" => (480, 270),  // ~25% of 1920x1080
+        "large" => (640, 360),   // ~33% of 1920x1080
+        _ => (320, 180),         // Default to small
+    };
+
+    // Calculate overlay position based on corner
+    let overlay_position = match pip_config.position.as_str() {
+        "top-left" => format!("{}:{}", pip_config.padding, pip_config.padding),
+        "top-right" => format!("W-w-{}:{}", pip_config.padding, pip_config.padding),
+        "bottom-left" => format!("{}:H-h-{}", pip_config.padding, pip_config.padding),
+        "bottom-right" => format!("W-w-{}:H-h-{}", pip_config.padding, pip_config.padding),
+        _ => format!("W-w-{}:H-h-{}", pip_config.padding, pip_config.padding), // Default to bottom-right
+    };
+
+    // Build FFmpeg command with overlay filter
+    // Scale webcam to PiP size and overlay on screen recording
+    let filter_complex = format!(
+        "[1:v]scale={}:{}[pip];[0:v][pip]overlay={}",
+        pip_width, pip_height, overlay_position
+    );
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+    cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording
+    cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
+    cmd.arg("-filter_complex").arg(&filter_complex);
+    
+    // Mix audio from both sources (if webcam has audio, otherwise just use screen audio)
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("fast");
+    cmd.arg("-crf").arg("23");
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    cmd.arg("-movflags").arg("faststart");
+    
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("error");
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+    
+    if output.status.success() {
+        Ok(output_path)
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("FFmpeg composite error: {}", error))
+    }
+}
+
 #[tauri::command]
 fn export_video(
     clips: Vec<ClipData>,
@@ -384,7 +453,8 @@ pub fn run() {
         stop_screen_recording_async,
         get_recording_status,
         mux_video_audio,
-        convert_webm_to_mp4
+        convert_webm_to_mp4,
+        composite_pip_video
     ])
     .setup(|app| {
       let app_handle = app.handle().clone();

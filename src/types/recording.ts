@@ -6,6 +6,12 @@ export interface ScreenSource {
   height: number;
 }
 
+export interface PiPConfig {
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  size: 'small' | 'medium' | 'large';
+  padding: number;
+}
+
 export interface RecordingState {
   isRecording: boolean;
   recordingType: 'screen' | 'webcam' | 'combined' | null;
@@ -15,6 +21,10 @@ export interface RecordingState {
   audioBlob: Blob | null;
   videoPath: string | null;
   selectedScreenSource: ScreenSource | null;
+  // Combined recording specific
+  webcamPath: string | null;
+  screenPath: string | null;
+  pipConfig: PiPConfig | null;
 }
 
 export type RecordingType = 'screen' | 'webcam' | 'combined';
