@@ -40,10 +40,10 @@ async fn export_video(
         // Trim each clip: [i:v]trim=start={trim_start}:duration={duration},setpts=PTS-STARTPTS[v{i}]
         //                 [i:a]atrim=start={trim_start}:duration={duration},asetpts=PTS-STARTPTS[a{i}]
         let trim_start = clip.trim_start;
-        let trim_end = clip.trim_start + clip.duration;
+        let duration = clip.duration;
         filter_parts.push(format!(
-            "[{}:v]trim=start={:.6}:end={:.6},setpts=PTS-STARTPTS[v{}];[{}:a]atrim=start={:.6}:end={:.6},asetpts=PTS-STARTPTS[a{}]",
-            i, trim_start, trim_end, i, i, trim_start, trim_end, i
+            "[{}:v]trim=start={:.6}:duration={:.6},setpts=PTS-STARTPTS[v{}];[{}:a]atrim=start={:.6}:duration={:.6},asetpts=PTS-STARTPTS[a{}]",
+            i, trim_start, duration, i, i, trim_start, duration, i
         ));
         
         // Add to concat inputs
