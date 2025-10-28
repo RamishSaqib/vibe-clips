@@ -114,11 +114,13 @@ fn export_video(
             cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
         }
         
-        // Use fast preset and copy audio to speed up export
+        // Use fast preset with proper encoding
         cmd.arg("-c:v").arg("libx264");
         cmd.arg("-preset").arg("ultrafast");
-        cmd.arg("-crf").arg("28"); // Lower quality but faster
-        cmd.arg("-c:a").arg("copy"); // Copy audio, don't re-encode
+        cmd.arg("-crf").arg("23"); // Better quality
+        cmd.arg("-c:a").arg("aac"); // Re-encode audio for compatibility
+        cmd.arg("-b:a").arg("192k"); // Audio bitrate
+        cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
         cmd.arg("-movflags").arg("faststart"); // Web-friendly
         
         // Add flags to suppress ALL output
