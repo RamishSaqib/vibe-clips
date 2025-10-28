@@ -74,7 +74,9 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
   };
 
   const handleBrowse = async () => {
+    console.log('Browse button clicked');
     try {
+      console.log('Calling save dialog...');
       const path = await save({
         title: 'Save Exported Video',
         defaultPath: 'output.mp4',
@@ -84,11 +86,16 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
         }]
       });
       
+      console.log('Save dialog returned:', path);
+      
       if (path) {
         setOutputPath(path);
+      } else {
+        console.log('User cancelled file dialog');
       }
     } catch (error) {
       console.error('File dialog error:', error);
+      alert('Failed to open file dialog: ' + error);
     }
   };
 
