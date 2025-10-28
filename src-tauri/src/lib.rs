@@ -20,7 +20,15 @@ async fn export_video(
     }
 
     println!("=== EXPORT START ===");
-    println!("Exporting {} clips to {}", clips.len(), output_path);
+    println!("Exporting {} clips to '{}'", clips.len(), output_path);
+    
+    // Validate output path has a filename
+    if !output_path.ends_with(".mp4") && !output_path.ends_with(".mov") {
+        return Err(format!("Output path must end with .mp4 or .mov, got: '{}'", output_path));
+    }
+    
+    println!("Output path validated: {}", output_path);
+    
     for (i, clip) in clips.iter().enumerate() {
         println!("Clip {}: path={}, trim_start={}, duration={}", 
                  i, clip.file_path, clip.trim_start, clip.duration);
@@ -60,30 +68,30 @@ async fn export_video(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add flags to suppress ALL output
+        // Add flags to suppress ALL output except errors
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("quiet"); // Completely silent
+        cmd.arg("-loglevel").arg("error"); // Show errors only
         cmd.arg("-nostats"); // No stats output
         
         cmd.arg(&output_path);
         
         println!("Executing FFmpeg...");
         
-        // CRITICAL: Redirect stdout/stderr to null BEFORE executing
+        // Capture stderr to get error messages
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        cmd.stderr(Stdio::piped());
         
-        let status = cmd.status()
+        let output = cmd.output()
             .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
         
-        println!("FFmpeg finished with status: {:?}", status.code());
-        
-        if status.success() {
+        if output.status.success() {
             println!("=== EXPORT SUCCESS ===");
             return Ok(format!("Video exported successfully to {}", output_path));
         } else {
             println!("=== EXPORT FAILED ===");
-            return Err(format!("FFmpeg export failed with exit code: {:?}", status.code()));
+            let error = String::from_utf8_lossy(&output.stderr);
+            println!("FFmpeg error output: {}", error);
+            return Err(format!("FFmpeg export failed: {}", error));
         }
     }
     
@@ -124,24 +132,25 @@ async fn export_video(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add flags to suppress ALL output
+        // Add flags to suppress ALL output except errors
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("quiet");
+        cmd.arg("-loglevel").arg("error");
         cmd.arg("-nostats");
         
         cmd.arg(temp_file.to_str().unwrap());
         
         println!("Processing clip {}...", i);
         
-        // Suppress all output
+        // Capture errors
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        cmd.stderr(Stdio::piped());
         
-        let status = cmd.status()
+        let output = cmd.output()
             .map_err(|e| format!("Failed to execute FFmpeg for clip {}: {}", i, e))?;
         
-        if !status.success() {
-            return Err(format!("Failed to trim clip {} with exit code: {:?}", i, status.code()));
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to trim clip {}: {}", i, error));
         }
         
         println!("Clip {} processed successfully", i);
@@ -169,20 +178,20 @@ async fn export_video(
     cmd.arg("-i").arg(concat_file.to_str().unwrap());
     cmd.arg("-c").arg("copy");
     
-    // Add flags to suppress ALL output for concat too
+    // Add flags to suppress ALL output except errors for concat too
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("quiet");
+    cmd.arg("-loglevel").arg("error");
     cmd.arg("-nostats");
     
     cmd.arg(&output_path);
     
     println!("Concatenating {} clips...", temp_files.len());
     
-    // Suppress all output
+    // Capture errors
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
+    cmd.stderr(Stdio::piped());
     
-    let status = cmd.status()
+    let output = cmd.output()
         .map_err(|e| format!("Failed to execute FFmpeg concat: {}", e))?;
     
     // Cleanup temp files
@@ -192,12 +201,13 @@ async fn export_video(
     }
     let _ = std::fs::remove_file(&concat_file);
     
-    if status.success() {
+    if output.status.success() {
         println!("=== EXPORT SUCCESS ===");
         Ok(format!("Video exported successfully to {}", output_path))
     } else {
         println!("=== EXPORT FAILED ===");
-        Err(format!("Concatenation failed with exit code: {:?}", status.code()))
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Concatenation failed: {}", error))
     }
 }
 
