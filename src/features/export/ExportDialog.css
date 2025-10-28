@@ -166,3 +166,32 @@
   100% { transform: rotate(360deg); }
 }
 
+.export-message {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.export-message-success {
+  background: #0a5d0a;
+  border: 1px solid #0d7b0d;
+}
+
+.export-message-error {
+  background: #5d0a0a;
+  border: 1px solid #7b0d0d;
+}
+
+.export-message p {
+  color: #fff;
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.export-message .message-detail {
+  color: #ccc;
+  font-size: 12px;
+  margin-top: 8px;
+}
+

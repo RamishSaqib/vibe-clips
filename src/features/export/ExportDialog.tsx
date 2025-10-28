@@ -15,7 +15,7 @@ interface ExportDialogProps {
 export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDialogProps) {
   const [outputPath, setOutputPath] = useState('');
   const [isExporting, setIsExporting] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [exportMessage, setExportMessage] = useState<'success' | 'error' | null>(null);
 
   const handleExport = async () => {
     if (!outputPath) {
@@ -35,6 +35,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
     }
 
     setIsExporting(true);
+    setExportMessage(null);
     onExportStart();
 
     try {
@@ -98,12 +99,16 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       }
 
       console.log('Export result:', result);
-      alert('Export completed successfully!');
-      onClose();
+      setExportMessage('success');
+      setIsExporting(false);
+      
+      // Auto-close after 3 seconds
+      setTimeout(() => {
+        onClose();
+      }, 3000);
     } catch (error) {
       console.error('Export error:', error);
-      alert(`Export failed: ${error}`);
-    } finally {
+      setExportMessage('error');
       setIsExporting(false);
     }
   };
@@ -182,6 +187,20 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
               <div className="spinner"></div>
             </div>
             <p>Exporting video... This may take a moment.</p>
+          </div>
+        )}
+
+        {exportMessage === 'success' && (
+          <div className="export-message export-message-success">
+            <p>✓ Export completed successfully!</p>
+            <p className="message-detail">Video saved to: {outputPath}</p>
+          </div>
+        )}
+
+        {exportMessage === 'error' && (
+          <div className="export-message export-message-error">
+            <p>✗ Export failed</p>
+            <p className="message-detail">Please try again or check if FFmpeg is installed.</p>
           </div>
         )}
       </div>
