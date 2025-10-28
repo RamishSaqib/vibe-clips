@@ -221,7 +221,7 @@ fn list_audio_devices(app_handle: tauri::AppHandle) -> Result<Vec<String>, Strin
 }
 
 #[tauri::command]
-fn test_ffmpeg() -> Result<String, String> {
+fn test_ffmpeg(app_handle: tauri::AppHandle) -> Result<String, String> {
     // Test if FFmpeg is available and working
     let output = create_hidden_command(Some(&app_handle), "ffmpeg")
         .arg("-version")
@@ -248,7 +248,7 @@ fn get_recording_status() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn mux_video_audio(video_path: String, audio_path: String, output_path: String) -> Result<String, String> {
+fn mux_video_audio(app_handle: tauri::AppHandle, video_path: String, audio_path: String, output_path: String) -> Result<String, String> {
     let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
@@ -274,7 +274,7 @@ fn mux_video_audio(video_path: String, audio_path: String, output_path: String) 
 }
 
 #[tauri::command]
-fn convert_webm_to_mp4(input_path: String, output_path: String) -> Result<String, String> {
+fn convert_webm_to_mp4(app_handle: tauri::AppHandle, input_path: String, output_path: String) -> Result<String, String> {
     let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&input_path);
@@ -320,6 +320,7 @@ struct AudioOptions {
 
 #[tauri::command]
 fn composite_pip_video(
+    app_handle: tauri::AppHandle,
     screen_path: String, 
     webcam_path: String, 
     pip_config: PiPConfig,
@@ -353,7 +354,7 @@ fn composite_pip_video(
     };
 
     // Get screen video duration (master timeline)
-    let screen_duration = match get_video_duration_from_file(screen_path.clone()) {
+    let screen_duration = match get_video_duration_from_file(app_handle.clone(), screen_path.clone()) {
         Ok(dur) => {
             println!("Screen recording duration: {:.2}s", dur);
             dur
@@ -471,7 +472,7 @@ fn composite_pip_video(
 
 // Helper function to check if a video file has an audio stream
 fn check_has_audio_stream(file_path: &str) -> bool {
-    let output = create_hidden_command(Some(&app_handle), "ffmpeg")
+    let output = create_hidden_command(None, "ffmpeg")
         .arg("-i")
         .arg(file_path)
         .arg("-hide_banner")
