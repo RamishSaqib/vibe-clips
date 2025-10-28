@@ -60,6 +60,8 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       console.log('Clips:', clipData);
       console.log('OutputPath:', outputPath);
       
+      console.log('Invoking export_video command...');
+      
       // Call Tauri command to export with explicit timeout handling
       const result = await Promise.race([
         invoke('export_video', {
