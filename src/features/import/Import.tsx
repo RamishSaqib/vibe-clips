@@ -8,7 +8,7 @@ export function Import() {
   const { videos, addVideo } = useVideos();
 
   const handleFilesSelected = useCallback((files: FileList) => {
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach((file, index) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
@@ -19,7 +19,7 @@ export function Import() {
 
         video.addEventListener('loadedmetadata', () => {
           const newVideo: VideoFile = {
-            id: `${Date.now()}-${Math.random()}`,
+            id: `${Date.now()}-${index}-${Math.random()}`,
             path: dataUrl,
             filename: file.name,
             duration: video.duration,
