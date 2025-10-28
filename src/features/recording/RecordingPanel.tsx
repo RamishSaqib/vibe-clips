@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import './RecordingPanel.css';
 import ScreenRecording from './ScreenRecording';
+import WebcamRecording from './WebcamRecording';
 
 type RecordingTab = 'screen' | 'webcam' | 'combined';
 
@@ -31,8 +32,6 @@ export default function RecordingPanel() {
         <button
           className={`recording-tab ${activeTab === 'webcam' ? 'active' : ''}`}
           onClick={() => setActiveTab('webcam')}
-          disabled
-          title="Coming in PR#9"
         >
           Webcam
         </button>
@@ -48,7 +47,7 @@ export default function RecordingPanel() {
 
       <div className="recording-content">
         {activeTab === 'screen' && <ScreenRecording />}
-        {activeTab === 'webcam' && <div>Webcam recording coming in PR#9</div>}
+        {activeTab === 'webcam' && <WebcamRecording />}
         {activeTab === 'combined' && <div>Combined recording coming in PR#10</div>}
       </div>
     </div>

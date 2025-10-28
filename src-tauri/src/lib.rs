@@ -134,6 +134,36 @@ fn mux_video_audio(video_path: String, audio_path: String, output_path: String) 
 }
 
 #[tauri::command]
+fn convert_webm_to_mp4(input_path: String, output_path: String) -> Result<String, String> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+    cmd.arg("-i").arg(&input_path);
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("fast");
+    cmd.arg("-crf").arg("23");
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    cmd.arg("-movflags").arg("faststart");
+    cmd.arg(&output_path);
+    cmd.arg("-hide_banner");
+    cmd.arg("-loglevel").arg("error");
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+    
+    if output.status.success() {
+        // Clean up the WebM file
+        let _ = std::fs::remove_file(&input_path);
+        Ok(output_path)
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("FFmpeg conversion error: {}", error))
+    }
+}
+
+#[tauri::command]
 fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
@@ -353,7 +383,8 @@ pub fn run() {
         start_screen_recording_async,
         stop_screen_recording_async,
         get_recording_status,
-        mux_video_audio
+        mux_video_audio,
+        convert_webm_to_mp4
     ])
     .setup(|app| {
       let app_handle = app.handle().clone();

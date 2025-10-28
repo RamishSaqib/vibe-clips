@@ -10,6 +10,7 @@ import type { TimelineClip } from '../types/timeline';
 interface RecordingContextType {
   recordingState: RecordingState;
   startScreenRecording: (source: ScreenSource) => Promise<void>;
+  startWebcamRecording: (deviceId: string, resolution: { width: number; height: number }) => Promise<void>;
   stopRecording: () => Promise<void>;
   saveRecording: (addToTimeline: boolean) => Promise<void>;
   listScreenSources: () => Promise<ScreenSource[]>;
@@ -36,6 +37,11 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [audioRecorder, setAudioRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+
+  // Webcam recording state
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [webcamRecorder, setWebcamRecorder] = useState<MediaRecorder | null>(null);
+  const [webcamChunks, setWebcamChunks] = useState<Blob[]>([]);
 
   // Timer effect
   useEffect(() => {
@@ -134,47 +140,153 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }
   }, [startAudioRecording, stopAudioRecording]);
 
+  const startWebcamRecording = useCallback(async (deviceId: string, resolution: { width: number; height: number }) => {
+    try {
+      // Get temp directory from Rust
+      let tempDir = await invoke<string>('get_temp_dir');
+      // Remove trailing backslash if present
+      tempDir = tempDir.replace(/[\\\/]$/, '');
+      
+      const timestamp = Date.now();
+      const webmPath = `${tempDir}\\webcam_recording_${timestamp}.webm`;
+      const mp4Path = `${tempDir}\\webcam_recording_${timestamp}.mp4`;
+
+      // Request webcam access with video and audio
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: resolution.width },
+          height: { ideal: resolution.height }
+        },
+        audio: true
+      });
+
+      setWebcamStream(stream);
+
+      // Create MediaRecorder
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+      
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const webmBlob = new Blob(chunks, { type: 'video/webm' });
+        
+        // Save WebM to temp file
+        const arrayBuffer = await webmBlob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        
+        // Convert to base64 data URL for save_temp_video command
+        const reader = new FileReader();
+        reader.readAsDataURL(webmBlob);
+        reader.onloadend = async () => {
+          const dataUrl = reader.result as string;
+          const savedPath = await invoke<string>('save_temp_video', { dataUrl });
+          
+          // Update state with saved WebM path (will convert to MP4 on save)
+          setRecordingState(prev => ({
+            ...prev,
+            videoPath: savedPath, // This is the WebM file
+            outputPath: mp4Path,  // This will be the MP4 after conversion
+          }));
+        };
+      };
+
+      recorder.start();
+      setWebcamRecorder(recorder);
+      setWebcamChunks(chunks);
+
+      setRecordingState({
+        isRecording: true,
+        recordingType: 'webcam',
+        duration: 0,
+        startTime: Date.now(),
+        outputPath: mp4Path,
+        audioBlob: null,
+        videoPath: webmPath,
+        selectedScreenSource: null,
+      });
+    } catch (error) {
+      console.error('Failed to start webcam recording:', error);
+      throw error;
+    }
+  }, []);
+
   const stopRecording = useCallback(async () => {
     if (!recordingState.isRecording) return;
 
     try {
-      // Stop audio recording
-      stopAudioRecording();
+      if (recordingState.recordingType === 'screen') {
+        // Stop audio recording
+        stopAudioRecording();
 
-      // Stop screen recording (kills FFmpeg process)
-      const videoPath = await invoke<string>('stop_screen_recording_async');
+        // Stop screen recording (kills FFmpeg process)
+        const videoPath = await invoke<string>('stop_screen_recording_async');
 
-      setRecordingState(prev => ({
-        ...prev,
-        isRecording: false,
-        videoPath, // Update with actual path from stop command
-      }));
+        setRecordingState(prev => ({
+          ...prev,
+          isRecording: false,
+          videoPath, // Update with actual path from stop command
+        }));
+      } else if (recordingState.recordingType === 'webcam') {
+        // Stop webcam recorder
+        if (webcamRecorder && webcamRecorder.state !== 'inactive') {
+          webcamRecorder.stop();
+        }
+        
+        // Stop webcam stream
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+          setWebcamStream(null);
+        }
+
+        setRecordingState(prev => ({
+          ...prev,
+          isRecording: false,
+        }));
+      }
     } catch (error) {
       console.error('Failed to stop recording:', error);
       throw error;
     }
-  }, [recordingState.isRecording, stopAudioRecording]);
+  }, [recordingState.isRecording, recordingState.recordingType, stopAudioRecording, webcamRecorder, webcamStream]);
 
   const saveRecording = useCallback(async (addToTimeline: boolean) => {
-    const { videoPath, audioBlob, outputPath } = recordingState;
+    const { videoPath, audioBlob, outputPath, recordingType } = recordingState;
 
     if (!videoPath || !outputPath) {
       throw new Error('No recording to save');
     }
 
     try {
-      // For now, skip metadata extraction and use placeholder values
-      // The video will load properly when played in the VideoPlayer component
+      let finalPath = videoPath;
+
+      // For webcam recordings, convert WebM to MP4
+      if (recordingType === 'webcam') {
+        await invoke('convert_webm_to_mp4', {
+          inputPath: videoPath,
+          outputPath
+        });
+        finalPath = outputPath;
+      }
       
       // Get actual file size
-      const fileSize = await invoke<number>('get_file_size', { filePath: videoPath });
+      const fileSize = await invoke<number>('get_file_size', { filePath: finalPath });
       
       // Generate thumbnail
-      const thumbnailPath = videoPath.replace('.mp4', '_thumb.jpg');
+      const thumbnailPath = finalPath.replace(/\.(mp4|webm)$/, '_thumb.jpg');
       let thumbnail: string | undefined;
       try {
         await invoke('generate_video_thumbnail', { 
-          videoPath, 
+          videoPath: finalPath, 
           outputPath: thumbnailPath 
         });
         thumbnail = thumbnailPath;
@@ -185,8 +297,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       
       const videoFile: VideoFile = {
         id: `recording_${Date.now()}`,
-        path: videoPath,
-        filename: videoPath.split('\\').pop() || 'recording.mp4',
+        path: finalPath,
+        filename: finalPath.split('\\').pop() || 'recording.mp4',
         duration: recordingState.duration, // Use recorded duration from timer
         size: fileSize, // Actual file size in bytes
         resolution: {
@@ -239,6 +351,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       value={{
         recordingState,
         startScreenRecording,
+        startWebcamRecording,
         stopRecording,
         saveRecording,
         listScreenSources,
