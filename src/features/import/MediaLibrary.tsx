@@ -70,14 +70,16 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
               <div className="media-thumbnail">
                 {video.thumbnail ? (
                   <img 
-                    src={convertFileSrc(video.thumbnail)} 
+                    src={video.thumbnail.startsWith('data:') ? video.thumbnail : convertFileSrc(video.thumbnail)}
                     alt={video.filename}
+                    onError={(e) => console.error('Thumbnail load error:', video.filename)}
                   />
                 ) : (
                   <video 
-                    src={convertFileSrc(video.path)} 
+                    src={video.path.startsWith('data:') ? video.path : convertFileSrc(video.path)}
                     muted
                     preload="metadata"
+                    onError={(e) => console.error('Video preview load error:', video.filename)}
                   />
                 )}
               </div>

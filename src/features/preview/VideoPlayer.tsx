@@ -127,10 +127,17 @@ export function VideoPlayer() {
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
+        setIsPlaying(false);
       } else {
-        videoRef.current.play();
+        videoRef.current.play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((error) => {
+            console.error('Failed to play video:', error);
+            setIsPlaying(false);
+          });
       }
-      setIsPlaying(!isPlaying);
     }
   };
 
@@ -154,8 +161,12 @@ export function VideoPlayer() {
     <div className="video-player">
       <video
         ref={videoRef}
-        src={convertFileSrc(currentClip.video.path)}
+        src={currentClip.video.path.startsWith('data:') ? currentClip.video.path : convertFileSrc(currentClip.video.path)}
         className="video-element"
+        onError={(e) => {
+          console.error('Video load error:', e);
+          console.error('Attempted to load:', currentClip.video.path);
+        }}
       />
       
       <div className="video-player-controls">
