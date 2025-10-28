@@ -126,12 +126,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       
       const timestamp = Date.now();
       const videoPath = `${tempDir}\\screen_recording_${timestamp}.mp4`;
-      const outputPath = `${tempDir}\\screen_recording_final_${timestamp}.mp4`;
 
-      // Start audio recording
-      await startAudioRecording();
-
-      // Start screen recording via Rust (FFmpeg spawned as background process)
+      // Start screen recording via Rust (FFmpeg with system audio)
       await invoke('start_screen_recording_async', { 
         outputPath: videoPath
       });
@@ -141,17 +137,19 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         recordingType: 'screen',
         duration: 0,
         startTime: Date.now(),
-        outputPath,
+        outputPath: videoPath,
         audioBlob: null,
         videoPath,
         selectedScreenSource: source,
+        webcamPath: null,
+        screenPath: null,
+        pipConfig: null,
       });
     } catch (error) {
       console.error('Failed to start screen recording:', error);
-      stopAudioRecording();
       throw error;
     }
-  }, [startAudioRecording, stopAudioRecording]);
+  }, []);
 
   const startWebcamRecording = useCallback(async (deviceId: string, resolution: { width: number; height: number }) => {
     try {
@@ -266,7 +264,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           width: { ideal: resolution.width },
           height: { ideal: resolution.height }
         },
-        audio: false // Don't capture webcam audio for combined recording (screen audio is enough)
+        audio: true // Capture microphone audio for combined recording
       });
 
       setWebcamStream(stream);
@@ -351,10 +349,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
     try {
       if (recordingState.recordingType === 'screen') {
-        // Stop audio recording
-        stopAudioRecording();
-
-        // Stop screen recording (kills FFmpeg process)
+        // Stop screen recording (FFmpeg with system audio)
         const videoPath = await invoke<string>('stop_screen_recording_async');
 
         setRecordingState(prev => ({
@@ -379,10 +374,10 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           isRecording: false,
         }));
       } else if (recordingState.recordingType === 'combined') {
-        // Stop screen recording
+        // Stop screen recording (with system audio)
         const screenPath = await invoke<string>('stop_screen_recording_async');
 
-        // Stop webcam recorder
+        // Stop webcam recorder (with mic audio)
         if (webcamRecorder && webcamRecorder.state !== 'inactive') {
           webcamRecorder.stop();
         }
@@ -403,7 +398,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       console.error('Failed to stop recording:', error);
       throw error;
     }
-  }, [recordingState.isRecording, recordingState.recordingType, stopAudioRecording, webcamRecorder, webcamStream]);
+  }, [recordingState.isRecording, recordingState.recordingType, webcamRecorder, webcamStream]);
 
   const saveRecording = useCallback(async (addToTimeline: boolean, saveOptions?: {
     saveScreen?: boolean;

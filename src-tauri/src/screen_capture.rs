@@ -119,16 +119,31 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     }
     
     // Start FFmpeg process with stdin available so we can send 'q' to stop gracefully
+    // Capture screen video + system audio (desktop audio)
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-y"); // Overwrite output file
-    cmd.arg("-f").arg("gdigrab"); // Windows screen capture
+    
+    // Video input: screen capture
+    cmd.arg("-f").arg("gdigrab");
     cmd.arg("-draw_mouse").arg("0"); // Don't draw mouse cursor to avoid flickering
     cmd.arg("-framerate").arg("30");
-    cmd.arg("-i").arg("desktop"); // Capture entire desktop
+    cmd.arg("-i").arg("desktop");
+    
+    // Audio input: system audio via dshow (DirectShow)
+    // Try to capture default audio output (desktop audio)
+    cmd.arg("-f").arg("dshow");
+    cmd.arg("-i").arg("audio=Stereo Mix"); // Fallback to stereo mix if available
+    
+    // Video encoding
     cmd.arg("-c:v").arg("libx264");
     cmd.arg("-preset").arg("ultrafast");
     cmd.arg("-crf").arg("23");
     cmd.arg("-pix_fmt").arg("yuv420p");
+    
+    // Audio encoding
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    
     cmd.arg("-movflags").arg("faststart"); // Write moov atom at beginning for better compatibility
     cmd.arg(&output_path);
     cmd.arg("-hide_banner");
@@ -137,7 +152,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     // Keep stdin open so we can send 'q' to stop gracefully
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
+    cmd.stderr(Stdio::piped()); // Capture stderr to see if audio fails
     
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to start FFmpeg: {}. Make sure FFmpeg is installed.", e))?;
@@ -153,7 +168,7 @@ pub fn start_screen_recording_process(output_path: String) -> Result<String, Str
     session.start_time = Some(std::time::SystemTime::now());
     session.ffmpeg_process = Some(pid);
     
-    Ok(format!("Recording started (PID: {})", pid))
+    Ok(format!("Recording started with system audio (PID: {})", pid))
 }
 
 #[cfg(not(windows))]
