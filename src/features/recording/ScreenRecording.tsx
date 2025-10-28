@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRecording } from '../../contexts/RecordingContext';
 import type { ScreenSource } from '../../types/recording';
+import { formatTime } from '../../utils/format';
 import './ScreenRecording.css';
 
 export default function ScreenRecording() {
@@ -86,13 +87,6 @@ export default function ScreenRecording() {
 
   const handleDiscardRecording = () => {
     setShowSaveOptions(false);
-    // Reset state
-  };
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -140,7 +134,7 @@ export default function ScreenRecording() {
           <div className="recording-status">
             <div className="recording-indicator"></div>
             <span>Recording</span>
-            <span className="recording-timer">{formatDuration(recordingState.duration)}</span>
+            <span className="recording-timer">{formatTime(recordingState.duration)}</span>
           </div>
           <button className="stop-button" onClick={handleStopRecording}>
             ■ Stop Recording

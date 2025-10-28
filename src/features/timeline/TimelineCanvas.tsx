@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { TimelineState } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
+import { formatTime } from '../../utils/format';
+import { TIMELINE_CONSTANTS, DRAG_THRESHOLD, TRIM_THROTTLE_MS, DRAG_THROTTLE_MS } from '../../utils/constants';
 import './TimelineCanvas.css';
 
 interface TimelineCanvasProps {
@@ -12,9 +14,15 @@ interface TimelineCanvasProps {
   onClipTrim?: (clipId: string, trimStart: number, trimEnd: number) => void;
 }
 
-const PIXELS_PER_SECOND = 30;
-const RULER_HEIGHT = 30;
-const TRACK_HEIGHT = 60;
+const {
+  PIXELS_PER_SECOND,
+  RULER_HEIGHT,
+  TRACK_HEIGHT,
+  HANDLE_WIDTH,
+  HANDLE_TOLERANCE,
+  MIN_CLIP_DURATION,
+} = TIMELINE_CONSTANTS;
+
 const TOTAL_HEIGHT = RULER_HEIGHT + TRACK_HEIGHT;
 
 export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, onClipSelect, onClipTrim }: TimelineCanvasProps) {
@@ -30,6 +38,16 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const didMoveRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState<{ clipId: string; handle: 'left' | 'right' } | null>(null);
 
+  // Memoize maxDuration to avoid recalculation on every render
+  const maxDuration = useMemo(() => {
+    return Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
+  }, [state.clips]);
+
+  // Memoize canvas width to avoid recalculation
+  const canvasWidth = useMemo(() => {
+    return Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 800);
+  }, [maxDuration, state.zoom]);
+
   // Draw the timeline
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,8 +57,6 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     if (!ctx) return;
 
     // Calculate canvas width based on content
-    const maxDuration = Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
-    const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 800);
     canvas.width = canvasWidth;
     
     const width = canvas.width;
@@ -290,10 +306,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [state, videos, hoveredHandle]);
+  }, [state, videos, hoveredHandle, maxDuration, canvasWidth]);
 
-  // Handle mouse move for hover effects
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Handle mouse move for hover effects - use useCallback to prevent recreation
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -334,10 +350,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     }
     
     setHoveredHandle(newHoveredHandle);
-  };
+  }, [state.clips, state.selectedClipId, state.zoom, videos]);
 
-  // Handle mouse interactions
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Handle mouse interactions - use useCallback
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -411,13 +427,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
         if (mouseDownPosRef.current) {
           const dx = Math.abs(moveEvent.clientX - mouseDownPosRef.current.x);
           const dy = Math.abs(moveEvent.clientY - mouseDownPosRef.current.y);
-          if (dx > 3 || dy > 3) { // Movement threshold
+          if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) { // Movement threshold
             didMoveRef.current = true;
           }
         }
         
         const now = Date.now();
-        if (now - lastTrimUpdateRef.current < 16) return;
+        if (now - lastTrimUpdateRef.current < TRIM_THROTTLE_MS) return;
         lastTrimUpdateRef.current = now;
         
         const containerRect = container.getBoundingClientRect();
@@ -444,7 +460,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
           const currentTrimEnd = currentClip ? currentClip.trimEnd : initialClip.trimEnd;
           
           // Allow dragging all the way back to 0 (untrimming)
-          const newTrimStart = Math.max(0, Math.min(timeInVideo, currentTrimEnd - 0.1));
+          const newTrimStart = Math.max(0, Math.min(timeInVideo, currentTrimEnd - MIN_CLIP_DURATION));
           onClipTrim(clipId, newTrimStart, currentTrimEnd);
         } else {
           // Dragging right handle: adjust trimEnd
@@ -453,7 +469,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
           const currentTrimStart = currentClip ? currentClip.trimStart : initialClip.trimStart;
           
           // Allow dragging all the way to video.duration (untrimming)
-          const newTrimEnd = Math.max(currentTrimStart + 0.1, Math.min(timeInVideo, video.duration));
+          const newTrimEnd = Math.max(currentTrimStart + MIN_CLIP_DURATION, Math.min(timeInVideo, video.duration));
           onClipTrim(clipId, currentTrimStart, newTrimEnd);
         }
       };
@@ -498,7 +514,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       if (!canvas || !container || !isDraggingRef.current) return;
       
       const now = Date.now();
-      if (now - lastDragUpdateRef.current < 33) return;
+      if (now - lastDragUpdateRef.current < DRAG_THROTTLE_MS) return;
       lastDragUpdateRef.current = now;
       
       const containerRect = container.getBoundingClientRect();
@@ -522,15 +538,15 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     
     document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
-  };
+  }, [state.clips, videos, onClipTrim, onPlayheadDrag, onClipSelect, state.zoom, maxDuration]);
 
-  // Handle drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
+  // Handle drag and drop - use useCallback
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -538,10 +554,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     if (videoId) {
       onVideoDropped(videoId);
     }
-  };
-
-  const maxDuration = Math.max(...state.clips.map(c => c.startTime + c.duration), 10);
-  const canvasWidth = Math.max(maxDuration * PIXELS_PER_SECOND * state.zoom, 1200);
+  }, [onVideoDropped]);
 
   return (
     <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%', height: TOTAL_HEIGHT + 'px' }}>
@@ -566,11 +579,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   );
 }
 
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
+// Helper function for formatting time - using shared utility
 
 function getTimeInterval(zoom: number): number {
   if (zoom >= 4) return 1;

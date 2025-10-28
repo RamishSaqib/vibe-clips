@@ -4,6 +4,7 @@ import type { VideoFile } from '../../types/video';
 import { useVideos } from '../../contexts/VideoContext';
 import { useTimeline } from '../../contexts/TimelineContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { formatTime, formatFileSize } from '../../utils/format';
 import './MediaLibrary.css';
 
 interface MediaLibraryProps {
@@ -15,17 +16,6 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
   const { removeVideo } = useVideos();
   const { removeClipsByVideoId } = useTimeline();
   const [deleteConfirm, setDeleteConfirm] = useState<{ videoId: string; videoName: string } | null>(null);
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   const handleDeleteClick = (e: React.MouseEvent, video: VideoFile) => {
     e.stopPropagation();
@@ -88,11 +78,11 @@ export function MediaLibrary({ videos, onSelect }: MediaLibraryProps) {
                   {video.filename}
                 </div>
                 <div className="media-metadata">
-                  <span>{formatDuration(video.duration)}</span>
+                  <span>{formatTime(video.duration)}</span>
                   <span>•</span>
                   <span>{video.resolution.width}×{video.resolution.height}</span>
                   <span>•</span>
-                  <span>{formatSize(video.size)}</span>
+                  <span>{formatFileSize(video.size)}</span>
                 </div>
               </div>
               <button 

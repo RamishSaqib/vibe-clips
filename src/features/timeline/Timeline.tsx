@@ -3,6 +3,7 @@ import type { TimelineClip } from '../../types/timeline';
 import { TimelineCanvas } from './TimelineCanvas';
 import { useVideos } from '../../contexts/VideoContext';
 import { useTimeline } from '../../contexts/TimelineContext';
+import { formatTime } from '../../utils/format';
 import './Timeline.css';
 
 export function Timeline() {
@@ -123,18 +124,14 @@ export function Timeline() {
       </div>
 
       <div className="timeline-info">
-        <p>Total Duration: {getMaxTimelineTime(timelineState.clips)}</p>
+        <p>Total Duration: {formatTime(getMaxTimelineTime(timelineState.clips))}</p>
         <p>Clips: {timelineState.clips.length}</p>
       </div>
     </div>
   );
 }
 
-function getMaxTimelineTime(clips: TimelineClip[]): string {
-  if (clips.length === 0) return '0:00';
-  
-  const maxTime = Math.max(...clips.map(clip => clip.startTime + clip.duration));
-  const mins = Math.floor(maxTime / 60);
-  const secs = Math.floor(maxTime % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+function getMaxTimelineTime(clips: TimelineClip[]): number {
+  if (clips.length === 0) return 0;
+  return Math.max(...clips.map(clip => clip.startTime + clip.duration));
 }

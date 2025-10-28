@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useRecording } from '../../contexts/RecordingContext';
 import type { ScreenSource, PiPConfig } from '../../types/recording';
+import { formatTime } from '../../utils/format';
 import './CombinedRecording.css';
 
 export default function CombinedRecording() {
@@ -192,14 +193,9 @@ export default function CombinedRecording() {
   };
 
   const handleDiscardRecording = () => {
-    // Clear the recording state
-    setRecordingState(prev => ({
-      ...prev,
-      recordingType: null,
-      recordedVideoPath: null
-    }));
     setError(null);
-    // Restart preview
+    // The recording state will be reset by the context when save is not called
+    // Just restart the preview
     if (selectedCamera) {
       navigator.mediaDevices.getUserMedia({
         video: {
@@ -213,14 +209,11 @@ export default function CombinedRecording() {
         if (previewRef.current) {
           previewRef.current.srcObject = stream;
         }
+      }).catch(err => {
+        console.error('Failed to restart preview:', err);
+        setError('Failed to restart camera preview');
       });
     }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const showRecordedState = !recordingState.isRecording && recordingState.recordingType === 'combined';

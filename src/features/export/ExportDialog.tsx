@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import type { TimelineClip } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
+import { formatTime } from '../../utils/format';
 import './ExportDialog.css';
 
 interface ExportDialogProps {
@@ -153,7 +154,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
         
         <div className="export-info">
           <p>Clips: {clips.length}</p>
-          <p>Total Duration: {formatDuration(getTotalDuration(clips))}</p>
+          <p>Total Duration: {formatTime(getTotalDuration(clips))}</p>
         </div>
 
         <div className="export-path">
@@ -206,12 +207,6 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       </div>
     </div>
   );
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 function getTotalDuration(clips: TimelineClip[]): number {

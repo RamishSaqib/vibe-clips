@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRecording } from '../../contexts/RecordingContext';
+import { formatTime } from '../../utils/format';
+import { RECORDING_RESOLUTIONS } from '../../utils/constants';
 import './WebcamRecording.css';
 import './ScreenRecording.css'; // Reuse some styles
 
@@ -7,18 +9,6 @@ interface CameraDevice {
   deviceId: string;
   label: string;
 }
-
-interface Resolution {
-  width: number;
-  height: number;
-  label: string;
-}
-
-const RESOLUTIONS: Resolution[] = [
-  { width: 640, height: 480, label: '480p' },
-  { width: 1280, height: 720, label: '720p' },
-  { width: 1920, height: 1080, label: '1080p' },
-];
 
 export default function WebcamRecording() {
   const {
@@ -30,7 +20,7 @@ export default function WebcamRecording() {
 
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
-  const [selectedResolution, setSelectedResolution] = useState<Resolution>(RESOLUTIONS[1]); // Default 720p
+  const [selectedResolution, setSelectedResolution] = useState(RECORDING_RESOLUTIONS[1]); // Default 720p
   const [isMirrored, setIsMirrored] = useState(true);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -174,12 +164,6 @@ export default function WebcamRecording() {
     }
   };
 
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   return (
     <div className="webcam-recording">
       {error && <div className="error-message">{error}</div>}
@@ -227,7 +211,7 @@ export default function WebcamRecording() {
             <div className="option-group">
               <div className="option-label">Resolution:</div>
               <div className="resolution-selector">
-                {RESOLUTIONS.map(res => (
+                {RECORDING_RESOLUTIONS.map(res => (
                   <button
                     key={res.label}
                     className={`resolution-button ${
@@ -270,7 +254,7 @@ export default function WebcamRecording() {
           <div className="recording-status">
             <div className="recording-indicator"></div>
             <span>Recording</span>
-            <span className="recording-timer">{formatDuration(recordingState.duration)}</span>
+            <span className="recording-timer">{formatTime(recordingState.duration)}</span>
           </div>
           <button className="stop-button" onClick={handleStopRecording}>
             ■ Stop Recording
