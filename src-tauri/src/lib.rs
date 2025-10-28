@@ -1,4 +1,4 @@
-use tauri::{Emitter, Listener};
+use tauri::{Emitter, Listener, Manager};
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 
@@ -8,9 +8,33 @@ use std::os::windows::process::CommandExt;
 mod screen_capture;
 mod audio_capture;
 
+// Helper function to get bundled FFmpeg path
+fn get_bundled_ffmpeg_path(app_handle: &tauri::AppHandle, program: &str) -> Option<std::path::PathBuf> {
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        #[cfg(target_os = "windows")]
+        let binary_name = format!("{}.exe", program);
+        #[cfg(not(target_os = "windows"))]
+        let binary_name = program.to_string();
+        
+        let bundled_path = resource_dir.join("binaries").join(&binary_name);
+        if bundled_path.exists() {
+            println!("Found bundled {}: {:?}", program, bundled_path);
+            return Some(bundled_path);
+        }
+    }
+    None
+}
+
 // Helper function to find ffmpeg/ffprobe executable
-fn find_ffmpeg_binary(program: &str) -> String {
-    // First, try the program name directly (will work if in PATH)
+fn find_ffmpeg_binary(app_handle: Option<&tauri::AppHandle>, program: &str) -> String {
+    // First, try bundled binaries if app_handle is available
+    if let Some(handle) = app_handle {
+        if let Some(bundled_path) = get_bundled_ffmpeg_path(handle, program) {
+            return bundled_path.to_string_lossy().to_string();
+        }
+    }
+    
+    // Then try the program name directly (will work if in PATH)
     if std::process::Command::new(program)
         .arg("-version")
         .output()
@@ -41,8 +65,8 @@ fn find_ffmpeg_binary(program: &str) -> String {
 }
 
 // Helper function to create a Command that won't show a console window on Windows
-fn create_hidden_command(program: &str) -> Command {
-    let ffmpeg_path = find_ffmpeg_binary(program);
+fn create_hidden_command(app_handle: Option<&tauri::AppHandle>, program: &str) -> Command {
+    let ffmpeg_path = find_ffmpeg_binary(app_handle, program);
     let mut cmd = Command::new(ffmpeg_path);
     #[cfg(target_os = "windows")]
     {
@@ -111,8 +135,8 @@ fn get_file_size(file_path: String) -> Result<u64, String> {
 }
 
 #[tauri::command]
-fn get_video_duration_from_file(video_path: String) -> Result<f64, String> {
-    let output = create_hidden_command("ffprobe")
+fn get_video_duration_from_file(app_handle: tauri::AppHandle, video_path: String) -> Result<f64, String> {
+    let output = create_hidden_command(Some(&app_handle), "ffprobe")
         .arg("-v").arg("error")
         .arg("-show_entries").arg("format=duration")
         .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
@@ -130,8 +154,8 @@ fn get_video_duration_from_file(video_path: String) -> Result<f64, String> {
 }
 
 #[tauri::command]
-fn generate_video_thumbnail(video_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = create_hidden_command("ffmpeg");
+fn generate_video_thumbnail(app_handle: tauri::AppHandle, video_path: String, output_path: String) -> Result<String, String> {
+    let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
     cmd.arg("-ss").arg("00:00:01"); // Take frame at 1 second
@@ -160,9 +184,9 @@ fn list_screen_sources() -> Result<Vec<screen_capture::ScreenSource>, String> {
 }
 
 #[tauri::command]
-fn list_audio_devices() -> Result<Vec<String>, String> {
+fn list_audio_devices(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     // List available audio devices using FFmpeg
-    let output = create_hidden_command("ffmpeg")
+    let output = create_hidden_command(Some(&app_handle), "ffmpeg")
         .arg("-list_devices").arg("true")
         .arg("-f").arg("dshow")
         .arg("-i").arg("dummy")
@@ -199,7 +223,7 @@ fn list_audio_devices() -> Result<Vec<String>, String> {
 #[tauri::command]
 fn test_ffmpeg() -> Result<String, String> {
     // Test if FFmpeg is available and working
-    let output = create_hidden_command("ffmpeg")
+    let output = create_hidden_command(Some(&app_handle), "ffmpeg")
         .arg("-version")
         .output()
         .map_err(|e| format!("FFmpeg not found or not executable: {}", e))?;
@@ -225,7 +249,7 @@ fn get_recording_status() -> Result<bool, String> {
 
 #[tauri::command]
 fn mux_video_audio(video_path: String, audio_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = create_hidden_command("ffmpeg");
+    let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&video_path);
     cmd.arg("-i").arg(&audio_path);
@@ -251,7 +275,7 @@ fn mux_video_audio(video_path: String, audio_path: String, output_path: String) 
 
 #[tauri::command]
 fn convert_webm_to_mp4(input_path: String, output_path: String) -> Result<String, String> {
-    let mut cmd = create_hidden_command("ffmpeg");
+    let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&input_path);
     cmd.arg("-c:v").arg("libx264");
@@ -340,7 +364,7 @@ fn composite_pip_video(
         }
     };
 
-    let mut cmd = create_hidden_command("ffmpeg");
+    let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-i").arg(&screen_path);    // Input 0: screen recording (master timeline)
     cmd.arg("-i").arg(&webcam_path);    // Input 1: webcam recording
@@ -447,7 +471,7 @@ fn composite_pip_video(
 
 // Helper function to check if a video file has an audio stream
 fn check_has_audio_stream(file_path: &str) -> bool {
-    let output = create_hidden_command("ffmpeg")
+    let output = create_hidden_command(Some(&app_handle), "ffmpeg")
         .arg("-i")
         .arg(file_path)
         .arg("-hide_banner")
@@ -464,6 +488,7 @@ fn check_has_audio_stream(file_path: &str) -> bool {
 
 #[tauri::command]
 fn export_video(
+    app_handle: tauri::AppHandle,
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
 ) -> Result<String, String> {
@@ -516,7 +541,7 @@ fn export_video(
         
         let path = clip.file_path.replace("\\", "/");
         
-        let mut cmd = create_hidden_command("ffmpeg");
+        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
         cmd.arg("-y");
         
         // Only add trim if needed
@@ -580,7 +605,7 @@ fn export_video(
         
         let path = clip.file_path.replace("\\", "/");
         
-        let mut cmd = create_hidden_command("ffmpeg");
+        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
         cmd.arg("-y");
         
         if clip.trim_start > 0.0 {
@@ -630,7 +655,7 @@ fn export_video(
         .map_err(|e| format!("Failed to write concat file: {}", e))?;
     
     // Step 3: Concat all temp files
-    let mut cmd = create_hidden_command("ffmpeg");
+    let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-f").arg("concat");
     cmd.arg("-safe").arg("0");
