@@ -46,3 +46,6 @@ plans/
 *.tmp
 tmp/
 temp/
+
+# MD Files for just my reference
+RUBRIC.md

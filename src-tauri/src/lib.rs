@@ -36,8 +36,9 @@ async fn export_video(
         let clip = &sorted_clips[0];
         let path = clip.file_path.replace("\\", "/");
         
-        cmd.arg("-i").arg(&path);
+        // Put -ss BEFORE -i for faster seeking (input seeking)
         cmd.arg("-ss").arg(&format!("{:.6}", clip.trim_start));
+        cmd.arg("-i").arg(&path);
         cmd.arg("-t").arg(&format!("{:.6}", clip.duration));
         
         // Codecs
@@ -48,7 +49,8 @@ async fn export_video(
         cmd.arg("-y");
         cmd.arg(&output_path);
         
-        println!("Single clip export command: {:?}", cmd);
+        println!("Single clip export - Input: {}, Trim: start={:.2}s, duration={:.2}s", path, clip.trim_start, clip.duration);
+        println!("Output path: {}", output_path);
         
         cmd.stderr(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -57,11 +59,14 @@ async fn export_video(
             .map_err(|e| format!("Failed to execute FFmpeg: {}. Make sure FFmpeg is installed and in your PATH.", e))?;
         
         if output.status.success() {
+            println!("Export successful!");
             return Ok(format!("Video exported successfully to {}", output_path));
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("FFmpeg stdout: {}", stdout);
             println!("FFmpeg stderr: {}", error);
-            return Err(format!("FFmpeg export failed: {}", error));
+            return Err(format!("FFmpeg export failed: {}\nOutput: {}", error, stdout));
         }
     }
     
