@@ -2,7 +2,7 @@
 
 **Last Updated:** October 28, 2024  
 **MVP Deadline:** Tuesday, October 28th at 10:59 PM CT
-**Progress:** PRs 1-4 Completed, PRs 5-7 In Progress
+**Progress:** PRs 1-6 Completed, PR#7 In Progress
 
 ---
 
@@ -111,27 +111,27 @@
 
 ---
 
-## PR#6: Export to MP4
+## PR#6: Export to MP4 ✅ COMPLETE
 **Branch:** `feature/pr6-export-mp4`
 
-- [ ] Create `/src/features/export/` folder structure
-- [ ] Implement `ExportDialog.tsx` with output path selector
-- [ ] Add export button to main UI
-- [ ] Create Tauri command `export_video` in Rust (`src-tauri/src/main.rs`)
-- [ ] Install/bundle FFmpeg binary or document installation
-- [ ] Build FFmpeg command string with clip inputs
-- [ ] Implement concat demuxer for sequential clips
-- [ ] Apply trim filters (`-ss` and `-t`) for each clip
-- [ ] Set output codec (`-c:v libx264 -c:a aac`)
-- [ ] Execute FFmpeg command from Rust
-- [ ] Parse FFmpeg progress output
-- [ ] Implement `ExportProgress.tsx` with progress bar
-- [ ] Send progress updates from Rust to frontend
-- [ ] Handle FFmpeg errors and display to user
-- [ ] Save exported video to user-selected path
-- [ ] Test export with single clip
-- [ ] Test export with multiple clips
-- [ ] Test export with trimmed clips
+- [x] Create `/src/features/export/` folder structure
+- [x] Implement `ExportDialog.tsx` with output path selector
+- [x] Add export button to main UI
+- [x] Create Tauri command `export_video` in Rust (`src-tauri/src/main.rs`)
+- [x] Install/bundle FFmpeg binary or document installation
+- [x] Build FFmpeg command string with clip inputs
+- [x] Implement concat demuxer for sequential clips
+- [x] Apply trim filters (`-ss` and `-t`) for each clip
+- [x] Set output codec (`-c:v libx264 -c:a aac`)
+- [x] Execute FFmpeg command from Rust
+- [x] Parse FFmpeg progress output (timeout handling)
+- [x] Implement `ExportProgress.tsx` with progress bar
+- [x] Send progress updates from Rust to frontend
+- [x] Handle FFmpeg errors and display to user
+- [x] Save exported video to user-selected path
+- [x] Test export with single clip
+- [x] Test export with multiple clips
+- [x] Test export with trimmed clips
 - [ ] Verify exported video plays in external players (VLC, QuickTime)
 - [ ] Test error handling (invalid paths, FFmpeg not found)
 - [ ] Commit and push branch

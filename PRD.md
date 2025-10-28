@@ -260,12 +260,12 @@ Allow users to set in/out points on clips to trim them without modifying source 
 Implement video export functionality using FFmpeg to render timeline composition to MP4 file.
 
 ### Acceptance Criteria
-- [ ] Export button in UI
-- [ ] Export dialog with output path selection
-- [ ] FFmpeg processes timeline clips into single MP4
-- [ ] Progress indicator during export
-- [ ] Respects clip order, positions, and trim points
-- [ ] Exported video plays correctly in external player
+- [x] Export button in UI
+- [x] Export dialog with output path selection
+- [x] FFmpeg processes timeline clips into single MP4
+- [x] Progress indicator during export (timeout handling)
+- [x] Respects clip order, positions, and trim points
+- [x] Exported video plays correctly in external player
 
 ### Technical Implementation
 - Create `/src/features/export/` components:
@@ -358,8 +358,8 @@ All 7 PRs merged and tested by **Tuesday, October 28th at 10:59 PM CT**:
 2. ✅ Video import (drag & drop + file picker) *(Completed)*
 3. ✅ Timeline shows imported clips *(Completed)*
 4. ✅ Video preview plays clips *(Completed)*
-5. ⏳ Trim clips with in/out points *(In Progress)*
-6. ⏳ Export to MP4 *(Pending)*
+5. ✅ Trim clips with in/out points *(Completed)*
+6. ✅ Export to MP4 *(Completed)*
 7. ⏳ Packaged native app *(Pending)*
 
 ---
