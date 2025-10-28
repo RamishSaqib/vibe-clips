@@ -15,9 +15,15 @@ async fn export_video(
     clips: Vec<ClipData>,
     output_path: String,
 ) -> Result<String, String> {
+    println!("\n\n\n========== EXPORT CALLED ==========");
+    println!("Clips count: {}", clips.len());
+    println!("Output path: {}", output_path);
+    
     if clips.is_empty() {
+        println!("ERROR: No clips");
         return Err("No clips to export".to_string());
     }
+    println!("========== EXPORT CALLED ==========\n\n\n");
 
     println!("=== EXPORT START ===");
     println!("Exporting {} clips to '{}'", clips.len(), output_path);
