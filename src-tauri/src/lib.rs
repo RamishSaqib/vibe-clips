@@ -94,23 +94,26 @@ async fn export_video(
         println!("Input file: '{}'", path);
         println!("Output file: '{}'", output_path);
         
-        // Capture stderr to get error messages
+        // Redirect ALL output to null to prevent spam
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::piped());
+        cmd.stderr(Stdio::null());
         
-        println!("Spawning FFmpeg process...");
-        let output = cmd.output()
+        println!("Starting FFmpeg...");
+        let status = cmd.status()
             .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
-        println!("FFmpeg process completed");
         
-        if output.status.success() {
+        println!("FFmpeg finished with exit code: {:?}", status.code());
+        
+        // Check if output file was created
+        if std::path::Path::new(&output_path).exists() {
             println!("=== EXPORT SUCCESS ===");
             return Ok(format!("Video exported successfully to {}", output_path));
+        } else if status.success() {
+            println!("=== EXPORT FAILED: File not created despite success code ===");
+            return Err("FFmpeg completed but output file was not created".to_string());
         } else {
             println!("=== EXPORT FAILED ===");
-            let error = String::from_utf8_lossy(&output.stderr);
-            println!("FFmpeg error output: {}", error);
-            return Err(format!("FFmpeg export failed: {}", error));
+            return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
         }
     }
     
