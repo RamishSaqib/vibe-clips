@@ -17,6 +17,35 @@ fn test_export() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn save_temp_video(data_url: String) -> Result<String, String> {
+    use std::io::Write;
+    
+    // Extract base64 data from data URL
+    if !data_url.starts_with("data:") {
+        return Err("Not a valid data URL".to_string());
+    }
+    
+    let base64_data = data_url.split(',').nth(1)
+        .ok_or("Invalid data URL format")?;
+    
+    // Decode base64
+    let bytes = base64::decode(base64_data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+    
+    // Create temp file
+    use std::env;
+    let temp_dir = env::temp_dir();
+    let video_path = temp_dir.join(format!("video_{}.mp4", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    
+    // Write file
+    std::fs::File::create(&video_path)
+        .and_then(|mut f| f.write_all(&bytes))
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+    
+    Ok(video_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn export_video(
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
@@ -223,7 +252,7 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![test_export, export_video])
+    .invoke_handler(tauri::generate_handler![test_export, save_temp_video, export_video])
     .setup(|app| {
       let app_handle = app.handle().clone();
       

@@ -39,17 +39,34 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
 
     try {
       // Prepare clip data for FFmpeg (matching Rust struct)
-      const clipData = clips.map(clip => {
+      // If videos are data URLs, convert them to temp files first
+      const clipData = await Promise.all(clips.map(async (clip) => {
         const video = videos.find(v => v.id === clip.videoFileId);
         if (!video) return null;
         
+        let filePath = video.path;
+        
+        // If the path is a data URL, convert it to a temp file
+        if (filePath.startsWith('data:')) {
+          console.log('Converting data URL to temp file...');
+          try {
+            filePath = await invoke('save_temp_video', { dataUrl: filePath });
+            console.log('Temp file created:', filePath);
+          } catch (error) {
+            console.error('Failed to convert data URL:', error);
+            throw error;
+          }
+        }
+        
         return {
-          file_path: video.path,
+          file_path: filePath,
           trim_start: clip.trimStart,
           duration: clip.duration,
           start_time: clip.startTime,
         };
-      }).filter(Boolean) as Array<{
+      }));
+      
+      const validClipData = clipData.filter(Boolean) as Array<{
         file_path: string;
         trim_start: number;
         duration: number;
@@ -65,7 +82,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       // Call Tauri command to export with explicit timeout handling
       const result = await Promise.race([
         invoke('export_video', {
-          clips: clipData,
+          clips: validClipData,
           outputPath,
         }),
         new Promise((_, reject) => 
