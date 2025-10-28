@@ -1,14 +1,17 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { TimelineClip } from '../../types/timeline';
 import { TimelineCanvas } from './TimelineCanvas';
 import { useVideos } from '../../contexts/VideoContext';
 import { useTimeline } from '../../contexts/TimelineContext';
 import { formatTime } from '../../utils/format';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
-  const { timelineState, setTimelineState, splitClipAtPlayhead } = useTimeline();
+  const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip } = useTimeline();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [clipToDelete, setClipToDelete] = useState<string | null>(null);
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => {
@@ -119,6 +122,31 @@ export function Timeline() {
     splitClipAtPlayhead(selectedClipId, playheadPosition);
   }, [timelineState, splitClipAtPlayhead]);
 
+  // Handle delete clip
+  const handleDeleteClip = useCallback(() => {
+    if (!timelineState.selectedClipId) {
+      console.warn('No clip selected to delete');
+      return;
+    }
+    
+    // Show confirmation dialog
+    setClipToDelete(timelineState.selectedClipId);
+    setShowDeleteConfirm(true);
+  }, [timelineState.selectedClipId]);
+
+  const confirmDeleteClip = useCallback(() => {
+    if (clipToDelete) {
+      deleteClip(clipToDelete);
+    }
+    setShowDeleteConfirm(false);
+    setClipToDelete(null);
+  }, [clipToDelete, deleteClip]);
+
+  const cancelDeleteClip = useCallback(() => {
+    setShowDeleteConfirm(false);
+    setClipToDelete(null);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -131,11 +159,17 @@ export function Timeline() {
         e.preventDefault();
         handleSplitClip();
       }
+
+      // Delete or Backspace to delete selected clip
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteClip();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSplitClip]);
+  }, [handleSplitClip, handleDeleteClip]);
 
   return (
     <div className="timeline-container">
@@ -160,6 +194,14 @@ export function Timeline() {
           >
             ✂️ Split
           </button>
+          <button 
+            onClick={handleDeleteClip}
+            disabled={!timelineState.selectedClipId}
+            title="Delete selected clip (Delete/Backspace)"
+            className="delete-button"
+          >
+            🗑️ Delete
+          </button>
         </div>
       </div>
       
@@ -178,6 +220,17 @@ export function Timeline() {
         <p>Total Duration: {formatTime(getMaxTimelineTime(timelineState.clips))}</p>
         <p>Clips: {timelineState.clips.length}</p>
       </div>
+
+      <ConfirmDialog 
+        isOpen={showDeleteConfirm}
+        title="Delete Clip"
+        message="Are you sure you want to delete this clip from the timeline? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous={true}
+        onConfirm={confirmDeleteClip}
+        onCancel={cancelDeleteClip}
+      />
     </div>
   );
 }

@@ -42,6 +42,24 @@
   background: #444;
 }
 
+.timeline-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.timeline-controls button:disabled:hover {
+  background: #333;
+}
+
+.timeline-controls button.delete-button {
+  background: #8b0000;
+  border-color: #a00;
+}
+
+.timeline-controls button.delete-button:hover:not(:disabled) {
+  background: #a00;
+}
+
 .timeline-controls span {
   font-size: 0.875rem;
   color: #999;
