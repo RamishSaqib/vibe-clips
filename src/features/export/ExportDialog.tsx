@@ -4,6 +4,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import type { TimelineClip } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
 import { formatTime } from '../../utils/format';
+import { EXPORT_PRESETS, QUALITY_PRESETS } from '../../utils/constants';
 import './ExportDialog.css';
 
 interface ExportDialogProps {
@@ -17,6 +18,8 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
   const [outputPath, setOutputPath] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<'success' | 'error' | null>(null);
+  const [resolutionPreset, setResolutionPreset] = useState<keyof typeof EXPORT_PRESETS>('source');
+  const [qualityPreset, setQualityPreset] = useState<keyof typeof QUALITY_PRESETS>('balanced');
 
   const handleExport = async () => {
     if (!outputPath) {
@@ -82,6 +85,9 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
       console.log('Invoking export_video command...');
       console.log('Calling invoke with:', { clips: validClipData, outputPath });
       
+      const selectedResolution = EXPORT_PRESETS[resolutionPreset];
+      const selectedQuality = QUALITY_PRESETS[qualityPreset];
+      
       let result;
       try {
         // Call Tauri command to export with explicit timeout handling
@@ -89,6 +95,10 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
           invoke('export_video', {
             clips: validClipData,
             outputPath,
+            width: selectedResolution.width,
+            height: selectedResolution.height,
+            crf: selectedQuality.crf,
+            preset: selectedQuality.preset,
           }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Export timeout after 120 seconds')), 120000)
@@ -155,6 +165,38 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
         <div className="export-info">
           <p>Clips: {clips.length}</p>
           <p>Total Duration: {formatTime(getTotalDuration(clips))}</p>
+        </div>
+
+        <div className="export-settings">
+          <div className="export-setting">
+            <label>Resolution:</label>
+            <select 
+              value={resolutionPreset} 
+              onChange={(e) => setResolutionPreset(e.target.value as keyof typeof EXPORT_PRESETS)}
+              disabled={isExporting}
+            >
+              {Object.entries(EXPORT_PRESETS).map(([key, preset]) => (
+                <option key={key} value={key}>
+                  {preset.label} - {preset.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="export-setting">
+            <label>Quality:</label>
+            <select 
+              value={qualityPreset} 
+              onChange={(e) => setQualityPreset(e.target.value as keyof typeof QUALITY_PRESETS)}
+              disabled={isExporting}
+            >
+              {Object.entries(QUALITY_PRESETS).map(([key, preset]) => (
+                <option key={key} value={key}>
+                  {preset.label} - {preset.description}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="export-path">
