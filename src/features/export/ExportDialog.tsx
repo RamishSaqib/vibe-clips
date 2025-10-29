@@ -10,11 +10,12 @@ import './ExportDialog.css';
 interface ExportDialogProps {
   clips: TimelineClip[];
   videos: VideoFile[];
+  overlayPositions?: { track1?: string; track2?: string }; // Overlay positions for tracks 1 and 2
   onClose: () => void;
   onExportStart: () => void;
 }
 
-export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDialogProps) {
+export function ExportDialog({ clips, videos, overlayPositions, onClose, onExportStart }: ExportDialogProps) {
   const [outputPath, setOutputPath] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<'success' | 'error' | null>(null);
@@ -68,6 +69,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
           trim_start: clip.trimStart,
           duration: clip.duration,
           start_time: clip.startTime,
+          track: clip.track,
         };
       }));
       
@@ -76,6 +78,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
         trim_start: number;
         duration: number;
         start_time: number;
+        track: number;
       }>;
 
       console.log('About to call invoke export_video...');
@@ -99,6 +102,7 @@ export function ExportDialog({ clips, videos, onClose, onExportStart }: ExportDi
             height: selectedResolution.height,
             crf: selectedQuality.crf,
             preset: selectedQuality.preset,
+            overlayPositions: overlayPositions || { track1: 'bottom-right', track2: 'bottom-left' },
           }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Export timeout after 120 seconds')), 120000)

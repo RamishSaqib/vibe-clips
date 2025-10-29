@@ -82,6 +82,7 @@ struct ClipData {
     trim_start: f64,
     duration: f64,
     start_time: f64,
+    track: i32, // Track number: 0 = main video, 1 = overlay 1, 2 = overlay 2
 }
 
 #[tauri::command]
@@ -490,6 +491,12 @@ fn check_has_audio_stream(file_path: &str) -> bool {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OverlayPositions {
+    track1: Option<String>, // "bottom-left" | "bottom-right" | "top-left" | "top-right" | "center"
+    track2: Option<String>,
+}
+
 #[tauri::command]
 async fn export_video(
     app_handle: tauri::AppHandle,
@@ -499,6 +506,7 @@ async fn export_video(
     height: u32,
     crf: String,
     preset: String,
+    overlay_positions: Option<OverlayPositions>,
 ) -> Result<String, String> {
     // Write to log FIRST THING to verify function is called - try multiple locations
     let _ = std::fs::write("C:/export_debug.log", "=== FUNCTION CALLED ===\n");
@@ -542,15 +550,28 @@ async fn export_video(
     let output_path_clone = outputPath.clone();
     let app_handle_clone = app_handle.clone();
     
+    let overlay_positions_clone = overlay_positions.clone();
+    
     // Run the export in a blocking task to avoid freezing the UI
     let result = tokio::task::spawn_blocking(move || {
-        export_video_blocking(app_handle_clone, sorted_clips, output_path_clone, width, height, crf, preset)
+        export_video_blocking(app_handle_clone, sorted_clips, output_path_clone, width, height, crf, preset, overlay_positions_clone)
     }).await.map_err(|e| format!("Task join error: {}", e))??;
     
     Ok(result)
 }
 
 // Blocking export function that does the actual FFmpeg work
+fn calculate_overlay_pos(position: &str, base_w: u32, base_h: u32, overlay_w: u32, overlay_h: u32, padding: u32) -> (u32, u32) {
+    match position {
+        "bottom-left" => (padding, base_h - overlay_h - padding),
+        "bottom-right" => (base_w - overlay_w - padding, base_h - overlay_h - padding),
+        "top-left" => (padding, padding),
+        "top-right" => (base_w - overlay_w - padding, padding),
+        "center" => ((base_w - overlay_w) / 2, (base_h - overlay_h) / 2),
+        _ => (base_w - overlay_w - padding, base_h - overlay_h - padding), // default to bottom-right
+    }
+}
+
 fn export_video_blocking(
     app_handle: tauri::AppHandle,
     sorted_clips: Vec<ClipData>,
@@ -559,83 +580,95 @@ fn export_video_blocking(
     height: u32,
     crf: String,
     preset: String,
+    overlay_positions: Option<OverlayPositions>,
 ) -> Result<String, String> {
     
-    // If only one clip, use simple trimming
-    if sorted_clips.len() == 1 {
-        let clip = &sorted_clips[0];
-        
-        // Validate input file exists
-        if !std::path::Path::new(&clip.file_path).exists() {
-            return Err(format!("Input video file not found: {}", clip.file_path));
-        }
-        
-        let path = clip.file_path.replace("\\", "/");
-        
-        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
-        cmd.arg("-y");
-        
-        // Only add trim if needed
-        if clip.trim_start > 0.0 {
-            cmd.arg("-ss").arg(&format!("{:.3}", clip.trim_start));
-        }
-        
-        cmd.arg("-i").arg(&path);
-        
-        // Only add duration if trimmed
-        if clip.trim_start > 0.0 || clip.duration > 0.0 {
-            cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
-        }
-        
-        // Use configured preset and quality
-        cmd.arg("-c:v").arg("libx264");
-        cmd.arg("-preset").arg(&preset);
-        cmd.arg("-crf").arg(&crf);
-        cmd.arg("-c:a").arg("aac"); // Re-encode audio for compatibility
-        cmd.arg("-b:a").arg("192k"); // Audio bitrate
-        cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
-        cmd.arg("-movflags").arg("faststart"); // Web-friendly
-        
-        // Add resolution scaling if specified (width > 0)
-        if width > 0 && height > 0 {
-            cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
-        }
-        
-        // Add flags to suppress ALL output
-        cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("quiet");
-        cmd.arg("-nostats");
-        
-        cmd.arg(&outputPath);
-        
-        // Redirect ALL output to null to prevent spam
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
-        
-        let status = cmd.status()
-            .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
-        
-        // Check if output file was created
-        if std::path::Path::new(&outputPath).exists() {
-            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
-            return Ok(format!("Video exported successfully to {}", outputPath));
-        } else if status.success() {
-            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
-            return Err("FFmpeg completed but output file was not created".to_string());
-        } else {
-            let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
-            return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
-        }
-    }
+    // Separate clips by track
+    let mut track_0_clips: Vec<&ClipData> = sorted_clips.iter().filter(|c| c.track == 0).collect();
+    let track_1_clips: Vec<&ClipData> = sorted_clips.iter().filter(|c| c.track == 1).collect();
+    let track_2_clips: Vec<&ClipData> = sorted_clips.iter().filter(|c| c.track == 2).collect();
     
-    // Multiple clips: create temporary trimmed files then concat them
-    use std::env;
-    let temp_dir = env::temp_dir();
+    let has_overlays = !track_1_clips.is_empty() || !track_2_clips.is_empty();
     
-    let mut temp_files = Vec::new();
+    // If only track 0 clips and no overlays, use simple concatenation
+    if !has_overlays {
+        track_0_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
     
-    // Step 1: Trim each clip to a temp file
-    for (i, clip) in sorted_clips.iter().enumerate() {
+        // If only one clip total and no overlays, use simple trimming
+        if track_0_clips.len() == 1 {
+            let clip = &track_0_clips[0];
+        
+            // Validate input file exists
+            if !std::path::Path::new(&clip.file_path).exists() {
+                return Err(format!("Input video file not found: {}", clip.file_path));
+            }
+            
+            let path = clip.file_path.replace("\\", "/");
+            
+            let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+            cmd.arg("-y");
+            
+            // Only add trim if needed
+            if clip.trim_start > 0.0 {
+                cmd.arg("-ss").arg(&format!("{:.3}", clip.trim_start));
+            }
+            
+            cmd.arg("-i").arg(&path);
+            
+            // Only add duration if trimmed
+            if clip.trim_start > 0.0 || clip.duration > 0.0 {
+                cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
+            }
+            
+            // Use configured preset and quality
+            cmd.arg("-c:v").arg("libx264");
+            cmd.arg("-preset").arg(&preset);
+            cmd.arg("-crf").arg(&crf);
+            cmd.arg("-c:a").arg("aac"); // Re-encode audio for compatibility
+            cmd.arg("-b:a").arg("192k"); // Audio bitrate
+            cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
+            cmd.arg("-movflags").arg("faststart"); // Web-friendly
+            
+            // Add resolution scaling if specified (width > 0)
+            if width > 0 && height > 0 {
+                cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+            }
+            
+            // Add flags to suppress ALL output
+            cmd.arg("-hide_banner");
+            cmd.arg("-loglevel").arg("quiet");
+            cmd.arg("-nostats");
+            
+            cmd.arg(&outputPath);
+            
+            // Redirect ALL output to null to prevent spam
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+            
+            let status = cmd.status()
+                .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+            
+            // Check if output file was created
+            if std::path::Path::new(&outputPath).exists() {
+                let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
+                return Ok(format!("Video exported successfully to {}", outputPath));
+            } else if status.success() {
+                let _ = std::fs::write("C:/export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
+                return Err("FFmpeg completed but output file was not created".to_string());
+            } else {
+                let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+                return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
+            }
+        }
+        
+        // Multiple clips on track 0: create temporary trimmed files then concat them
+        use std::env;
+        let temp_dir = env::temp_dir();
+        
+        let mut temp_files = Vec::new();
+        
+        // Step 1: Trim each clip to a temp file
+        for (i, clip) in track_0_clips.iter().enumerate() {
         let temp_file = temp_dir.join(format!("clip_{}.mp4", i));
         temp_files.push(temp_file.clone());
         
@@ -723,12 +756,275 @@ fn export_video_blocking(
     }
     let _ = std::fs::remove_file(&concat_file);
     
-    if status.success() {
-        let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
-        Ok(format!("Video exported successfully to {}", outputPath))
+        if status.success() {
+            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
+            Ok(format!("Video exported successfully to {}", outputPath))
+        } else {
+            let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+            Err(format!("Concatenation failed with exit code: {:?}", status.code()))
+        }
     } else {
-        let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
-        Err(format!("Concatenation failed with exit code: {:?}", status.code()))
+        // Has overlays - complex multi-track export
+        // Strategy:
+        // 1. Build base video from Track 0 clips (concatenated)
+        // 2. Overlay Track 1 clips on top using overlay filter with time-based enable
+        // 3. Overlay Track 2 clips on top of that
+        
+        use std::env;
+        let temp_dir = env::temp_dir();
+        
+        // Step 1: Build base video from Track 0
+        track_0_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
+        
+        if track_0_clips.is_empty() {
+            return Err("Track 0 (Main Video) must have at least one clip".to_string());
+        }
+        
+        // Calculate total duration
+        let max_duration = track_0_clips.iter()
+            .map(|c| c.start_time + c.duration)
+            .fold(0.0, f64::max);
+        
+        // Create base video from Track 0 clips
+        let mut track_0_temp_files = Vec::new();
+        for (i, clip) in track_0_clips.iter().enumerate() {
+            let temp_file = temp_dir.join(format!("track0_clip_{}.mp4", i));
+            track_0_temp_files.push(temp_file.clone());
+            
+            let path = clip.file_path.replace("\\", "/");
+            let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+            cmd.arg("-y");
+            
+            if clip.trim_start > 0.0 {
+                cmd.arg("-ss").arg(&format!("{:.3}", clip.trim_start));
+            }
+            
+            cmd.arg("-i").arg(&path);
+            
+            if clip.duration > 0.0 {
+                cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
+            }
+            
+            cmd.arg("-c:v").arg("libx264");
+            cmd.arg("-preset").arg(&preset);
+            cmd.arg("-crf").arg(&crf);
+            cmd.arg("-c:a").arg("aac");
+            cmd.arg("-b:a").arg("192k");
+            cmd.arg("-pix_fmt").arg("yuv420p");
+            
+            if width > 0 && height > 0 {
+                cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+            }
+            
+            cmd.arg("-hide_banner");
+            cmd.arg("-loglevel").arg("error");
+            cmd.arg(temp_file.to_str().unwrap()); // Output file - this was missing!
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+            
+            let output = cmd.output()
+                .map_err(|e| format!("Failed to execute FFmpeg for Track 0 clip {}: {}", i, e))?;
+            
+            if !output.status.success() {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("Failed to process Track 0 clip {}: FFmpeg error: {}", i, error_msg));
+            }
+            
+            // Verify file was created
+            if !temp_file.exists() {
+                return Err(format!("Track 0 clip {} output file was not created: {:?}", i, temp_file));
+            }
+        }
+        
+        // Create concat file for Track 0
+        let track0_concat = temp_dir.join("track0_concat.txt");
+        let concat_content: String = track_0_temp_files
+            .iter()
+            .map(|f| format!("file '{}'\n", f.to_str().unwrap()))
+            .collect();
+        
+        std::fs::write(&track0_concat, concat_content)
+            .map_err(|e| format!("Failed to write concat file: {}", e))?;
+        
+        // Create base video
+        let base_video = temp_dir.join("base_track0.mp4");
+        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+        cmd.arg("-y");
+        cmd.arg("-f").arg("concat");
+        cmd.arg("-safe").arg("0");
+        cmd.arg("-i").arg(track0_concat.to_str().unwrap());
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(&crf);
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+        cmd.arg("-pix_fmt").arg("yuv420p");
+        
+        // Pad base video to max duration if needed
+        if max_duration > 0.0 {
+            cmd.arg("-t").arg(&format!("{:.3}", max_duration));
+        }
+        
+        if width > 0 && height > 0 {
+            cmd.arg("-vf").arg(format!("scale={}:{},pad={}:{}:0:0:black", width, height, width, height));
+        }
+        
+        cmd.arg("-hide_banner");
+        cmd.arg("-loglevel").arg("error");
+        cmd.arg(base_video.to_str().unwrap()); // Output file - this was missing!
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        
+        let output = cmd.output()
+            .map_err(|e| format!("Failed to execute FFmpeg for base video: {}", e))?;
+        
+        if !output.status.success() {
+            // Cleanup
+            for f in &track_0_temp_files {
+                let _ = std::fs::remove_file(f);
+            }
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to create base video from Track 0: FFmpeg error: {}", error_msg));
+        }
+        
+        // Verify base video was created
+        if !base_video.exists() {
+            // Cleanup
+            for f in &track_0_temp_files {
+                let _ = std::fs::remove_file(f);
+            }
+            return Err("Base video file was not created".to_string());
+        }
+        
+        // Step 2: Build overlay video from Track 1
+        let mut overlay1_video: Option<std::path::PathBuf> = None;
+        // For now, handle single overlay clip on Track 1
+        // TODO: Handle multiple overlay clips on same track (need to chain overlays with proper timing)
+        if track_1_clips.len() == 1 {
+                let clip = &track_1_clips[0];
+                let overlay_path = clip.file_path.replace("\\", "/");
+                let overlay_temp = temp_dir.join("overlay1.mp4");
+                
+                // Scale overlay to be 30% of base size
+                let overlay_w = if width > 0 { (width as f64 * 0.3) as u32 } else { 320 };
+                let overlay_h = if height > 0 { (height as f64 * 0.3) as u32 } else { 180 };
+                
+                // Create overlay video padded to full timeline duration with clip at correct offset
+                let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+                cmd.arg("-y");
+                // Create black background for full duration
+                cmd.arg("-f").arg("lavfi");
+                cmd.arg("-i").arg(format!("color=c=black:s={}x{}:d={:.3}", overlay_w, overlay_h, max_duration));
+                // Add the source video
+                cmd.arg("-ss").arg(&format!("{:.3}", clip.trim_start));
+                cmd.arg("-i").arg(&overlay_path);
+                cmd.arg("-t").arg(&format!("{:.3}", clip.duration));
+                
+                // Filter to scale overlay and position it at the clip's timeline offset
+                let offset = clip.start_time;
+                let filter = format!(
+                    "[1:v]scale={}:{}[scaled];[0:v][scaled]overlay=enable='between(t,{:.3},{:.3})'[vout]",
+                    overlay_w, overlay_h, offset, offset + clip.duration
+                );
+                
+                cmd.arg("-filter_complex").arg(&filter);
+                cmd.arg("-map").arg("[vout]");
+                cmd.arg("-c:v").arg("libx264");
+                cmd.arg("-preset").arg(&preset);
+                cmd.arg("-crf").arg(&crf);
+                cmd.arg("-pix_fmt").arg("yuv420p");
+                cmd.arg("-t").arg(&format!("{:.3}", max_duration));
+                cmd.arg("-hide_banner");
+                cmd.arg("-loglevel").arg("error");
+                cmd.arg(overlay_temp.to_str().unwrap()); // Output file
+                cmd.stdout(Stdio::piped());
+                cmd.stderr(Stdio::piped());
+                
+                let output = cmd.output()
+                    .map_err(|e| format!("Failed to execute FFmpeg for overlay 1: {}", e))?;
+                
+                if output.status.success() && overlay_temp.exists() {
+                    overlay1_video = Some(overlay_temp);
+                } else {
+                    let error_msg = String::from_utf8_lossy(&output.stderr);
+                    return Err(format!("Failed to create overlay 1 video file: FFmpeg error: {}", error_msg));
+                }
+        }
+        
+        // Step 3: Build final composite
+        let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
+        cmd.arg("-y");
+        cmd.arg("-i").arg(base_video.to_str().unwrap());
+        
+        let mut filter_parts = Vec::new();
+        
+        // Add Track 1 overlay
+        if let Some(ref overlay1) = overlay1_video {
+            cmd.arg("-i").arg(overlay1.to_str().unwrap());
+            
+            // Calculate overlay position from configuration
+            let overlay_w = (width.max(640) as f64 * 0.3) as u32;
+            let overlay_h = (height.max(480) as f64 * 0.3) as u32;
+            let position_str = overlay_positions.as_ref()
+                .and_then(|p| p.track1.as_deref())
+                .unwrap_or("bottom-right");
+            let (x_pos, y_pos) = calculate_overlay_pos(position_str, width.max(640), height.max(480), overlay_w, overlay_h, 20);
+            
+            if track_1_clips.len() == 1 {
+                // Overlay is already positioned and timed in the overlay video itself
+                // Just overlay it at bottom-right position
+                filter_parts.push(format!(
+                    "[0:v][1:v]overlay={}:{}[vout]",
+                    x_pos, y_pos
+                ));
+            }
+        } else {
+            filter_parts.push("[0:v]copy[vout]".to_string());
+        }
+        
+        // TODO: Add Track 2 overlay similarly
+        
+        if !filter_parts.is_empty() {
+            let filter_complex = filter_parts.join(";");
+            cmd.arg("-filter_complex").arg(&filter_complex);
+            cmd.arg("-map").arg("[vout]");
+            cmd.arg("-map").arg("0:a?"); // Map audio from base video if present
+        }
+        
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(&crf);
+        cmd.arg("-c:a").arg("aac");
+        cmd.arg("-b:a").arg("192k");
+        cmd.arg("-pix_fmt").arg("yuv420p");
+        cmd.arg("-t").arg(&format!("{:.3}", max_duration));
+        cmd.arg("-movflags").arg("faststart");
+        cmd.arg("-hide_banner");
+        cmd.arg("-loglevel").arg("quiet");
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+        cmd.arg(&outputPath);
+        
+        let status = cmd.status()
+            .map_err(|e| format!("Failed to composite video: {}", e))?;
+        
+        // Cleanup temp files
+        for f in &track_0_temp_files {
+            let _ = std::fs::remove_file(f);
+        }
+        let _ = std::fs::remove_file(&track0_concat);
+        let _ = std::fs::remove_file(&base_video);
+        if let Some(overlay1) = overlay1_video {
+            let _ = std::fs::remove_file(overlay1);
+        }
+        
+        if status.success() {
+            let _ = std::fs::write("C:/export_debug.log", "=== MULTI-TRACK EXPORT SUCCESS ===\n");
+            Ok(format!("Multi-track video exported successfully to {}", outputPath))
+        } else {
+            let _ = std::fs::write("C:/export_debug.log", "=== MULTI-TRACK EXPORT FAILED ===\n");
+            Err("Failed to composite multi-track video".to_string())
+        }
     }
 }
 

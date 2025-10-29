@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import type { TimelineState } from '../../types/timeline';
+import type { TimelineState, OverlayPosition } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
 import { formatTime } from '../../utils/format';
 import { TIMELINE_CONSTANTS, DRAG_THRESHOLD, TRIM_THROTTLE_MS, DRAG_THROTTLE_MS } from '../../utils/constants';
@@ -9,24 +9,32 @@ interface TimelineCanvasProps {
   state: TimelineState;
   videos: VideoFile[];
   onPlayheadDrag: (position: number) => void;
-  onVideoDropped: (videoId: string) => void;
+  onVideoDropped: (videoId: string, track?: number) => void;
   onClipSelect?: (clipId: string | null) => void;
   onClipTrim?: (clipId: string, trimStart: number, trimEnd: number) => void;
+  onClipTrackChange?: (clipId: string, track: number) => void;
+  onTrackToggle?: (trackIndex: number, type: 'mute' | 'solo') => void;
+  onOverlayPositionChange?: (trackIndex: number, position: OverlayPosition) => void;
+  onClipMove?: (clipId: string, newStartTime: number) => void;
 }
 
 const {
   PIXELS_PER_SECOND,
   RULER_HEIGHT,
   TRACK_HEIGHT,
+  TRACK_HEADER_WIDTH,
+  NUM_TRACKS,
   HANDLE_WIDTH,
   HANDLE_TOLERANCE,
   MIN_CLIP_DURATION,
   SNAP_THRESHOLD,
+  TRACK_DRAG_THRESHOLD,
 } = TIMELINE_CONSTANTS;
 
-const TOTAL_HEIGHT = RULER_HEIGHT + TRACK_HEIGHT;
+const TOTAL_HEIGHT = RULER_HEIGHT + (TRACK_HEIGHT * NUM_TRACKS);
+const TRACK_LABELS = ['Main Video', 'Overlay 1', 'Overlay 2'];
 
-export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, onClipSelect, onClipTrim }: TimelineCanvasProps) {
+export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, onClipSelect, onClipTrim, onClipTrackChange, onTrackToggle, onOverlayPositionChange, onClipMove }: TimelineCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -39,6 +47,19 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const didMoveRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState<{ clipId: string; handle: 'left' | 'right' } | null>(null);
   const [snapIndicator, setSnapIndicator] = useState<number | null>(null); // Position in seconds where snap is occurring
+  const draggingClipRef = useRef<{ clipId: string; initialTrack: number } | null>(null);
+  const movingClipRef = useRef<{ clipId: string; initialStartTime: number; clickOffset: number } | null>(null);
+  
+  // Helper function to get track number from Y coordinate
+  const getTrackFromY = useCallback((y: number): number | null => {
+    if (y < RULER_HEIGHT) return null; // In ruler area
+    const trackY = y - RULER_HEIGHT;
+    const trackIndex = Math.floor(trackY / TRACK_HEIGHT);
+    if (trackIndex >= 0 && trackIndex < NUM_TRACKS) {
+      return trackIndex;
+    }
+    return null;
+  }, []);
 
   // Helper function to find nearest snap point
   const findSnapPoint = useCallback((time: number, snapEnabled: boolean): { time: number; snapped: boolean } => {
@@ -116,11 +137,55 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     ctx.lineTo(width, RULER_HEIGHT);
     ctx.stroke();
 
-    // Draw timeline track background
-    ctx.fillStyle = '#252525';
-    ctx.fillRect(0, RULER_HEIGHT, width, TRACK_HEIGHT);
+    // Draw track headers on left side
+    for (let trackIndex = 0; trackIndex < NUM_TRACKS; trackIndex++) {
+      const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
+      const trackState = state.tracks[trackIndex] || { muted: false, solo: false };
+      
+      // Track header background
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(0, trackY, TRACK_HEADER_WIDTH, TRACK_HEIGHT);
+      
+      // Track header border
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, trackY, TRACK_HEADER_WIDTH, TRACK_HEIGHT);
+      
+      // Track label
+      ctx.fillStyle = trackState.muted ? '#666' : '#ddd';
+      ctx.font = '12px sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(TRACK_LABELS[trackIndex], 8, trackY + TRACK_HEIGHT / 2);
+      
+      // Mute/Solo indicators
+      if (trackState.muted) {
+        ctx.fillStyle = '#ff6666';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('M', TRACK_HEADER_WIDTH - 30, trackY + 15);
+      }
+      if (trackState.solo) {
+        ctx.fillStyle = '#66ff66';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('S', TRACK_HEADER_WIDTH - 15, trackY + 15);
+      }
+    }
+    
+    // Draw timeline track backgrounds
+    for (let trackIndex = 0; trackIndex < NUM_TRACKS; trackIndex++) {
+      const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
+      const trackState = state.tracks[trackIndex] || { muted: false, solo: false };
+      
+      // Track background (darker if muted)
+      ctx.fillStyle = trackState.muted ? '#1a1a1a' : '#252525';
+      ctx.fillRect(TRACK_HEADER_WIDTH, trackY, width - TRACK_HEADER_WIDTH, TRACK_HEIGHT);
+      
+      // Track border
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(TRACK_HEADER_WIDTH, trackY, width - TRACK_HEADER_WIDTH, TRACK_HEIGHT);
+    }
 
-    // Draw time ruler markers and labels
+    // Draw time ruler markers and labels (accounting for track header width)
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     
@@ -128,7 +193,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     const startTime = 0;
     
     for (let time = startTime; time <= maxDuration; time += timeInterval) {
-      const x = time * PIXELS_PER_SECOND * state.zoom;
+      const x = time * PIXELS_PER_SECOND * state.zoom + TRACK_HEADER_WIDTH;
       
       // Draw tick marks in ruler section
       ctx.beginPath();
@@ -144,16 +209,20 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.fillStyle = '#555';
     }
 
-    // Draw clips
-    state.clips.forEach(clip => {
-      const video = videos.find(v => v.id === clip.videoFileId);
-      if (!video) return;
+    // Draw clips (grouped by track)
+    for (let trackIndex = 0; trackIndex < NUM_TRACKS; trackIndex++) {
+      const trackClips = state.clips.filter(c => c.track === trackIndex);
+      const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
+      
+      trackClips.forEach(clip => {
+        const video = videos.find(v => v.id === clip.videoFileId);
+        if (!video) return;
 
-      const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom;
-      const clipWidth = clip.duration * PIXELS_PER_SECOND * state.zoom;
-      const isSelected = state.selectedClipId === clip.id;
-      const clipY = RULER_HEIGHT + 5;
-      const clipHeight = TRACK_HEIGHT - 10;
+        const clipX = clip.startTime * PIXELS_PER_SECOND * state.zoom + TRACK_HEADER_WIDTH;
+        const clipWidth = clip.duration * PIXELS_PER_SECOND * state.zoom;
+        const isSelected = state.selectedClipId === clip.id;
+        const clipY = trackY + 5;
+        const clipHeight = TRACK_HEIGHT - 10;
 
       // Check if there are trimmed portions
       const hasLeftTrim = clip.trimStart > 0;
@@ -334,34 +403,38 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
         ctx.font = '9px sans-serif';
         ctx.fillText(formatTime(clip.duration), clipX + 8, clipY + 35);
       }
-    });
+      });
+    }
 
     // Draw playhead
     if (state.clips.length > 0) {
       const playheadX = state.playheadPosition * PIXELS_PER_SECOND * state.zoom;
       
-      // Draw playhead line from ruler through track
+      // Draw playhead line from ruler through all tracks
       ctx.strokeStyle = '#ff4a4a';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(playheadX, 0);
-      ctx.lineTo(playheadX, TOTAL_HEIGHT);
+      ctx.moveTo(playheadX + TRACK_HEADER_WIDTH, 0);
+      ctx.lineTo(playheadX + TRACK_HEADER_WIDTH, TOTAL_HEIGHT);
       ctx.stroke();
 
-      // Draw playhead circle in the middle of track
-      ctx.fillStyle = '#ff4a4a';
-      ctx.beginPath();
-      ctx.arc(playheadX, RULER_HEIGHT + TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      // Draw playhead circle in the middle of each track
+      for (let trackIndex = 0; trackIndex < NUM_TRACKS; trackIndex++) {
+        const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
+        ctx.fillStyle = '#ff4a4a';
+        ctx.beginPath();
+        ctx.arc(playheadX + TRACK_HEADER_WIDTH, trackY + TRACK_HEIGHT / 2, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     }
 
     // Draw snap indicator (dashed line)
     if (snapIndicator !== null) {
-      const snapX = snapIndicator * PIXELS_PER_SECOND * state.zoom;
+      const snapX = snapIndicator * PIXELS_PER_SECOND * state.zoom + TRACK_HEADER_WIDTH;
       
       ctx.strokeStyle = '#ffff00'; // Yellow
       ctx.lineWidth = 2;
@@ -382,10 +455,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
 
     const containerRect = container.getBoundingClientRect();
     const mouseXRelativeToContainer = e.clientX - containerRect.left;
+    const mouseYRelativeToContainer = e.clientY - containerRect.top;
     const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
     const scaleX = canvas.width / container.scrollWidth;
     const canvasX = totalCSSX * scaleX;
-    const mouseTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
+    // Account for track header width in time calculation
+    const adjustedCanvasX = Math.max(0, canvasX - TRACK_HEADER_WIDTH);
+    const mouseTime = adjustedCanvasX / (PIXELS_PER_SECOND * state.zoom);
     
     // Check if hovering over trim handles
     let newHoveredHandle: { clipId: string; handle: 'left' | 'right' } | null = null;
@@ -430,22 +506,34 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
     didMoveRef.current = false;
     
+    // Reset clip move reference
+    movingClipRef.current = null;
+    
     const maxTime = state.clips.length > 0 
       ? Math.max(...state.clips.map(c => c.startTime + c.duration))
       : 10;
     
     const containerRect = container.getBoundingClientRect();
     const mouseXRelativeToContainer = e.clientX - containerRect.left;
+    const mouseYRelativeToContainer = e.clientY - containerRect.top;
     const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
     const scaleX = canvas.width / container.scrollWidth;
     const canvasX = totalCSSX * scaleX;
-    const clickTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
+    // Account for track header width
+    const adjustedCanvasX = Math.max(0, canvasX - TRACK_HEADER_WIDTH);
+    const clickTime = adjustedCanvasX / (PIXELS_PER_SECOND * state.zoom);
+    const clickTrack = getTrackFromY(mouseYRelativeToContainer);
     
-    // Check for trim handle clicks
+    // Check for trim handle clicks - only check clips on the clicked track
     let clickedClip = null;
     let clickedHandle: 'left' | 'right' | null = null;
     
-    for (const clip of state.clips) {
+    // First, filter clips by track (only check clips on the track that was clicked)
+    const clipsOnTrack = clickTrack !== null 
+      ? state.clips.filter(clip => clip.track === clickTrack)
+      : [];
+    
+    for (const clip of clipsOnTrack) {
       const video = videos.find(v => v.id === clip.videoFileId);
       if (!video) continue;
       
@@ -458,7 +546,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
           clickTime <= clipStartTime + handleToleranceInTime) {
         clickedClip = clip;
         clickedHandle = 'left';
-        break;
+        break; // Prioritize handle clicks
       }
       
       // Check right handle (at visible clip end)
@@ -466,12 +554,21 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
           clickTime <= clipEndTime + handleToleranceInTime) {
         clickedClip = clip;
         clickedHandle = 'right';
-        break;
+        break; // Prioritize handle clicks
       }
-      
-      // Check clip body
-      if (clickTime >= clipStartTime && clickTime <= clipEndTime) {
-        clickedClip = clip;
+    }
+    
+    // If no handle was clicked, check clip body on the clicked track
+    if (!clickedHandle && clickTrack !== null) {
+      for (const clip of clipsOnTrack) {
+        const clipStartTime = clip.startTime;
+        const clipEndTime = clip.startTime + clip.duration;
+        
+        // Check clip body
+        if (clickTime >= clipStartTime && clickTime <= clipEndTime) {
+          clickedClip = clip;
+          break;
+        }
       }
     }
     
@@ -564,14 +661,111 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       return;
     }
     
-    // Handle clip selection
+    // Handle track header clicks (mute/solo buttons)
+    if (mouseXRelativeToContainer < TRACK_HEADER_WIDTH && clickTrack !== null && onTrackToggle) {
+      // Check if click is in mute/solo button area (right side of header)
+      const buttonX = mouseXRelativeToContainer;
+      if (buttonX > TRACK_HEADER_WIDTH - 40) {
+        // In button area
+        if (buttonX > TRACK_HEADER_WIDTH - 20) {
+          // Solo button
+          onTrackToggle(clickTrack, 'solo');
+        } else if (buttonX > TRACK_HEADER_WIDTH - 40) {
+          // Mute button
+          onTrackToggle(clickTrack, 'mute');
+        }
+      }
+      return; // Don't process as playhead drag or clip select
+    }
+    
+    // Handle clip selection first (on click)
+    // clickedClip is already filtered to the correct track
     if (clickedClip && onClipSelect) {
       onClipSelect(clickedClip.id);
-    } else if (onClipSelect) {
+    } else if (onClipSelect && clickTrack !== null) {
+      // Only deselect if clicking on a track (not the ruler)
       onClipSelect(null);
     }
     
-    // Handle playhead dragging
+    // If clicked on a clip body (not handle), prepare for potential drag
+    // But only start dragging after movement threshold is met
+    // clickedClip is already filtered to the correct track, so we can use it directly
+    if (clickedClip && !clickedHandle && onClipMove) {
+      const clickOffset = clickTime - clickedClip.startTime;
+      movingClipRef.current = {
+        clipId: clickedClip.id,
+        initialStartTime: clickedClip.startTime,
+        clickOffset: clickOffset,
+      };
+      
+      const handleMove = (moveEvent: MouseEvent) => {
+        if (!canvas || !container || !movingClipRef.current) return;
+        
+        // Check if movement threshold is met before starting drag
+        if (mouseDownPosRef.current) {
+          const dx = Math.abs(moveEvent.clientX - mouseDownPosRef.current.x);
+          const dy = Math.abs(moveEvent.clientY - mouseDownPosRef.current.y);
+          
+          // Only start dragging if moved more than threshold (prefer horizontal movement for clip dragging)
+          // Allow some vertical movement to account for imperfect mouse control
+          if (dx > DRAG_THRESHOLD || (dx > 2 && dy < 5)) {
+            didMoveRef.current = true;
+            
+            const containerRect = container.getBoundingClientRect();
+            let mouseXRelativeToContainer = moveEvent.clientX - containerRect.left;
+            mouseXRelativeToContainer = Math.max(0, Math.min(mouseXRelativeToContainer, containerRect.width));
+            
+            const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
+            const scaleX = canvas.width / container.scrollWidth;
+            const canvasX = totalCSSX * scaleX;
+            const adjustedCanvasX = Math.max(0, canvasX - TRACK_HEADER_WIDTH);
+            const mouseTime = adjustedCanvasX / (PIXELS_PER_SECOND * state.zoom);
+            
+            // Calculate new start time
+            let newStartTime = mouseTime - movingClipRef.current.clickOffset;
+            newStartTime = Math.max(0, newStartTime);
+            
+            // Apply snap if enabled
+            if (state.snapEnabled) {
+              const snapResult = findSnapPoint(newStartTime, true);
+              newStartTime = snapResult.time;
+              if (snapResult.snapped) {
+                setSnapIndicator(snapResult.time);
+              } else {
+                setSnapIndicator(null);
+              }
+            } else {
+              setSnapIndicator(null);
+            }
+            
+            // Update clip position
+            if (onClipMove) {
+              onClipMove(movingClipRef.current.clipId, newStartTime);
+            }
+          }
+        }
+      };
+      
+      const handleUp = () => {
+        // Only clear if we didn't actually drag
+        if (!didMoveRef.current && movingClipRef.current) {
+          // Just a click, selection already happened above
+        }
+        movingClipRef.current = null;
+        setSnapIndicator(null);
+        document.removeEventListener('mousemove', handleMove);
+        document.removeEventListener('mouseup', handleUp);
+      };
+      
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleUp);
+      
+      // Don't process playhead drag if clicked on clip
+      return;
+    }
+    
+    // Handle playhead dragging (only if not clicking on a clip)
+    // This should work regardless of which track we're on
     const clampedTime = Math.max(0, Math.min(clickTime, maxTime));
     const snapResult = findSnapPoint(clampedTime, state.snapEnabled);
     onPlayheadDrag(snapResult.time);
@@ -596,7 +790,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const totalCSSX = mouseXRelativeToContainer + container.scrollLeft;
       const scaleX = canvas.width / container.scrollWidth;
       const canvasX = totalCSSX * scaleX;
-      const newTime = canvasX / (PIXELS_PER_SECOND * state.zoom);
+      // Account for track header width in time calculation
+      const adjustedCanvasX = Math.max(0, canvasX - TRACK_HEADER_WIDTH);
+      const newTime = adjustedCanvasX / (PIXELS_PER_SECOND * state.zoom);
       const clampedTime = Math.max(0, Math.min(newTime, maxTime));
       
       // Apply snapping
@@ -632,14 +828,32 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     e.preventDefault();
     e.stopPropagation();
     
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    const mouseYRelativeToContainer = e.clientY - containerRect.top;
+    const track = getTrackFromY(mouseYRelativeToContainer);
+    
     const videoId = e.dataTransfer.getData('video-id');
     if (videoId) {
-      onVideoDropped(videoId);
+      onVideoDropped(videoId, track !== null ? track : 0);
     }
-  }, [onVideoDropped]);
+  }, [onVideoDropped, getTrackFromY]);
+
+  const handleOverlayPositionClick = (trackIndex: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onOverlayPositionChange) return;
+    
+    const currentPosition = state.tracks[trackIndex]?.overlayPosition || 'bottom-right';
+    const positions: OverlayPosition[] = ['bottom-left', 'bottom-right', 'top-left', 'top-right', 'center'];
+    const currentIndex = positions.indexOf(currentPosition);
+    const nextIndex = (currentIndex + 1) % positions.length;
+    onOverlayPositionChange(trackIndex, positions[nextIndex]);
+  };
 
   return (
-    <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'hidden', width: '100%', height: TOTAL_HEIGHT + 'px' }}>
+    <div ref={containerRef} style={{ overflowX: 'auto', overflowY: 'auto', width: '100%', maxHeight: '400px', position: 'relative' }}>
       <canvas
         ref={canvasRef}
         width={canvasWidth}
@@ -657,6 +871,55 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
           cursor: hoveredHandle ? 'ew-resize' : 'pointer'
         }}
       />
+      {/* Overlay position controls for overlay tracks */}
+      {[1, 2].map(trackIndex => {
+        const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
+        const trackState = state.tracks[trackIndex];
+        const position = trackState?.overlayPosition || (trackIndex === 1 ? 'bottom-right' : 'bottom-left');
+        const positionLabels: Record<OverlayPosition, string> = {
+          'bottom-left': 'BL',
+          'bottom-right': 'BR',
+          'top-left': 'TL',
+          'top-right': 'TR',
+          'center': 'C',
+        };
+        
+        return (
+          <button
+            key={trackIndex}
+            onClick={(e) => handleOverlayPositionClick(trackIndex, e)}
+            style={{
+              position: 'absolute',
+              left: '70px', // Position after "Overlay 1"/"Overlay 2" text with small gap
+              top: trackY + (TRACK_HEIGHT / 2) - 10 + 'px', // Center vertically in track
+              width: '18px', // Narrower to fit before mute indicator
+              height: '20px',
+              fontSize: '9px',
+              fontWeight: 'bold',
+              padding: '0',
+              background: position === 'center' ? '#555' : '#3a5a7a',
+              border: '1px solid #666',
+              color: '#ddd',
+              cursor: 'pointer',
+              borderRadius: '3px',
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = position === 'center' ? '#666' : '#4a6a8a';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = position === 'center' ? '#555' : '#3a5a7a';
+            }}
+            title={`Overlay position: ${position}. Click to cycle through positions.`}
+          >
+            {positionLabels[position]}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -1,72 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import './ImportZone.css';
 
 interface ImportZoneProps {
   onFilesSelected: (files: FileList) => void;
+  onFilesWithPaths: (filePaths: string[]) => void;
 }
 
-export function ImportZone({ onFilesSelected }: ImportZoneProps) {
+export function ImportZone({ onFilesSelected, onFilesWithPaths }: ImportZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Listen for Tauri file-drop events
-  useEffect(() => {
-    console.log('ImportZone: Setting up Tauri file-drop listener');
-    
-    const setupTauriFileDrop = async () => {
-      try {
-        const { listen } = await import('@tauri-apps/api/event');
-        console.log('ImportZone: Successfully imported listen function');
-        
-        // Listen for file-drop event from Tauri backend
-        await listen('file-drop', (event) => {
-          console.log('ImportZone: Successfully registered file-drop listener');
-          console.log('Frontend: Received file-drop event');
-          console.log('Frontend: event.payload =', event.payload);
-          
-          const filePaths = event.payload as string[];
-          console.log('Frontend: filePaths =', filePaths);
-          
-          if (filePaths && filePaths.length > 0) {
-            // Convert file paths to File objects
-            Promise.all(
-              filePaths.map(async (path) => {
-                try {
-                  // Use Tauri's fs API to read the file
-                  const { readBinaryFile } = await import('@tauri-apps/plugin-fs');
-                  const data = await readBinaryFile(path);
-                  
-                  // Create a File object from the data
-                  const fileName = path.split(/[/\\]/).pop() || 'unknown';
-                  const file = new File([data], fileName, { 
-                    type: 'video/mp4' // Default to video
-                  });
-                  
-                  return file;
-                } catch (error) {
-                  console.error('Error reading file:', path, error);
-                  return null;
-                }
-              })
-            ).then(files => {
-              const validFiles = files.filter(f => f !== null) as File[];
-              if (validFiles.length > 0) {
-                // Create a FileList-like object
-                const dataTransfer = new DataTransfer();
-                validFiles.forEach(file => dataTransfer.items.add(file));
-                onFilesSelected(dataTransfer.files);
-              }
-            });
-          }
-        });
-        console.log('ImportZone: Tauri file-drop setup complete');
-      } catch (error) {
-        console.error('ImportZone: Error setting up Tauri file-drop:', error);
-      }
-    };
-    
-    setupTauriFileDrop();
-  }, [onFilesSelected]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -85,47 +27,38 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
     e.stopPropagation();
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
-    console.log('handleDrop called');
-    console.log('dataTransfer.files:', e.dataTransfer.files);
-    console.log('dataTransfer.types:', Array.from(e.dataTransfer.types));
-    
     const files = e.dataTransfer.files;
-    
-    if (files && files.length > 0) {
-      console.log('Files found:', files.length);
-      
-      // Filter to video files
-      const videoFiles = Array.from(files).filter(file => {
-        const isVideo = file.type.startsWith('video/') || 
-                       file.name.endsWith('.mp4') || 
-                       file.name.endsWith('.mov');
-        console.log('Checking file:', file.name, 'type:', file.type, 'isVideo:', isVideo);
-        return isVideo;
-      });
-      
-      console.log('Video files after filtering:', videoFiles.length);
-      
-      if (videoFiles.length > 0) {
-        // Pass the files from dataTransfer
-        onFilesSelected(files);
-      }
-    } else {
-      console.log('No files in dataTransfer');
+    if (files.length > 0) {
+      onFilesSelected(files);
     }
   };
 
-  const handleClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleClick = async () => {
+    try {
+      console.log('Opening Tauri file picker...');
+      
+      const selected = await open({
+        multiple: true,
+        filters: [{
+          name: 'Video',
+          extensions: ['mp4', 'mov', 'MOV']
+        }]
+      });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      onFilesSelected(e.target.files);
+      if (selected) {
+        const paths = Array.isArray(selected) ? selected : [selected];
+        console.log('Native paths from Tauri picker:', paths);
+        onFilesWithPaths(paths);
+      } else {
+        console.log('File picker cancelled');
+      }
+    } catch (error) {
+      console.error('Failed to open file picker:', error);
     }
   };
 
@@ -138,23 +71,20 @@ export function ImportZone({ onFilesSelected }: ImportZoneProps) {
       onDrop={handleDrop}
       onClick={handleClick}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/mp4,video/quicktime,.mp4,.mov"
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
       <div className="import-zone-content">
         <svg className="import-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-        <h3>Click to import video files</h3>
+        <h3>Click or drag files to import</h3>
         <p>Browse for MP4 or MOV files</p>
-        <span className="file-types">Supports: MP4, MOV</span>
+        <span className="file-types">
+          Supports: MP4, MOV<br/>
+          <small style={{ fontSize: '0.85em', opacity: 0.8 }}>
+            MOV files auto-convert to MP4 (file picker only)
+          </small>
+        </span>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
-  const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip } = useTimeline();
+  const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip, setOverlayPosition } = useTimeline();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clipToDelete, setClipToDelete] = useState<string | null>(null);
 
@@ -19,11 +19,12 @@ export function Timeline() {
     });
   }, [setTimelineState]);
 
-  const handleVideoDropped = useCallback((videoId: string) => {
+  const handleVideoDropped = useCallback((videoId: string, track?: number) => {
     const video = videos.find(v => v.id === videoId);
     if (!video) return;
 
     setTimelineState(prev => {
+      const targetTrack = track !== undefined ? track : 0; // Default to track 0 if not specified
       const newClip: TimelineClip = {
         id: `clip-${Date.now()}`,
         videoFileId: video.id,
@@ -31,7 +32,7 @@ export function Timeline() {
         duration: video.duration,
         trimStart: 0,
         trimEnd: video.duration,
-        track: 0,
+        track: targetTrack,
       };
       
       return {
@@ -98,6 +99,58 @@ export function Timeline() {
       };
     });
   }, [videos, setTimelineState]);
+
+  const handleClipTrackChange = useCallback((clipId: string, newTrack: number) => {
+    setTimelineState(prev => {
+      const updatedClips = prev.clips.map(clip => {
+        if (clip.id === clipId) {
+          return { ...clip, track: newTrack };
+        }
+        return clip;
+      });
+      return { ...prev, clips: updatedClips };
+    });
+  }, [setTimelineState]);
+
+  const handleClipMove = useCallback((clipId: string, newStartTime: number) => {
+    setTimelineState(prev => {
+      const updatedClips = prev.clips.map(clip => {
+        if (clip.id === clipId) {
+          return { ...clip, startTime: newStartTime };
+        }
+        return clip;
+      });
+      return { ...prev, clips: updatedClips };
+    });
+  }, [setTimelineState]);
+
+  const handleTrackToggle = useCallback((trackIndex: number, type: 'mute' | 'solo') => {
+    setTimelineState(prev => {
+      const updatedTracks = prev.tracks.map((track, idx) => {
+        if (idx === trackIndex) {
+          if (type === 'solo') {
+            return { ...track, solo: !track.solo };
+          } else {
+            return { ...track, muted: !track.muted };
+          }
+        } else if (type === 'solo' && prev.tracks[trackIndex]?.solo) {
+          return { ...track, solo: false };
+        }
+        return track;
+      });
+      
+      // If enabling solo, disable solo on all other tracks
+      if (type === 'solo' && !prev.tracks[trackIndex].solo) {
+        updatedTracks.forEach((track, idx) => {
+          if (idx !== trackIndex) {
+            track.solo = false;
+          }
+        });
+      }
+      
+      return { ...prev, tracks: updatedTracks };
+    });
+  }, [setTimelineState]);
 
   // Handle split clip
   const handleSplitClip = useCallback(() => {
@@ -213,14 +266,18 @@ export function Timeline() {
       </div>
       
       <div className="timeline-content">
-        <TimelineCanvas 
-          state={timelineState}
-          videos={videos}
-          onPlayheadDrag={handlePlayheadDrag}
-          onVideoDropped={handleVideoDropped}
-          onClipSelect={handleClipSelect}
-          onClipTrim={handleClipTrim}
-        />
+      <TimelineCanvas 
+        state={timelineState}
+        videos={videos}
+        onPlayheadDrag={handlePlayheadDrag}
+        onVideoDropped={handleVideoDropped}
+        onClipSelect={handleClipSelect}
+        onClipTrim={handleClipTrim}
+        onClipTrackChange={handleClipTrackChange}
+        onTrackToggle={handleTrackToggle}
+        onOverlayPositionChange={setOverlayPosition}
+        onClipMove={handleClipMove}
+      />
       </div>
 
       <div className="timeline-info">

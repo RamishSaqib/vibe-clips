@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
-import type { TimelineState, TimelineClip } from '../types/timeline';
+import type { TimelineState, TimelineClip, OverlayPosition } from '../types/timeline';
 
 interface TimelineContextType {
   timelineState: TimelineState;
@@ -7,6 +7,7 @@ interface TimelineContextType {
   removeClipsByVideoId: (videoFileId: string) => void;
   splitClipAtPlayhead: (clipId: string, playheadPosition: number) => void;
   deleteClip: (clipId: string) => void;
+  setOverlayPosition: (trackIndex: number, position: OverlayPosition) => void;
 }
 
 const TimelineContext = createContext<TimelineContextType | undefined>(undefined);
@@ -19,6 +20,11 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     scrollOffset: 0,
     selectedClipId: null,
     snapEnabled: true, // Snap enabled by default
+    tracks: [
+      { muted: false, solo: false }, // Track 0: Main video
+      { muted: false, solo: false, overlayPosition: 'bottom-right' as OverlayPosition }, // Track 1: Overlay 1 - default bottom-right
+      { muted: false, solo: false, overlayPosition: 'bottom-left' as OverlayPosition }, // Track 2: Overlay 2 - default bottom-left
+    ],
   });
 
   const removeClipsByVideoId = (videoFileId: string) => {
@@ -156,8 +162,23 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const setOverlayPosition = (trackIndex: number, position: OverlayPosition) => {
+    setTimelineState(prev => {
+      if (trackIndex <= 0 || trackIndex >= prev.tracks.length) return prev;
+      
+      const updatedTracks = prev.tracks.map((track, idx) => {
+        if (idx === trackIndex) {
+          return { ...track, overlayPosition: position };
+        }
+        return track;
+      });
+      
+      return { ...prev, tracks: updatedTracks };
+    });
+  };
+
   return (
-    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead, deleteClip }}>
+    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead, deleteClip, setOverlayPosition }}>
       {children}
     </TimelineContext.Provider>
   );

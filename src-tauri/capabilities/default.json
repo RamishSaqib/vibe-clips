@@ -9,9 +9,34 @@
     "core:default",
     "core:window:allow-close",
     "core:window:allow-request-user-attention",
-    "fs:allow-read-file",
-    "fs:allow-write-file",
-    "fs:allow-exists",
-    "dialog:allow-save"
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$TEMP/**" },
+        { "path": "**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$TEMP/**" },
+        { "path": "**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-stat",
+      "allow": [
+        { "path": "$TEMP/**" },
+        { "path": "**" }
+      ]
+    },
+    "dialog:allow-save",
+    "dialog:allow-open"
   ]
 }

@@ -81,10 +81,11 @@
 
 .timeline-content {
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   background: #222;
   flex: 1;
   position: relative;
+  max-height: 500px;
 }
 
 .timeline-content::-webkit-scrollbar {

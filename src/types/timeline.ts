@@ -10,6 +10,14 @@ export interface TimelineClip {
   track: number; // Track number (0 for MVP)
 }
 
+export type OverlayPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'center';
+
+export interface TrackState {
+  muted: boolean;
+  solo: boolean;
+  overlayPosition?: OverlayPosition; // Position for overlay tracks (1 & 2), undefined means use default
+}
+
 export interface TimelineState {
   clips: TimelineClip[];
   playheadPosition: number; // Current playhead position in seconds
@@ -17,5 +25,6 @@ export interface TimelineState {
   scrollOffset: number; // Horizontal scroll offset in pixels
   selectedClipId: string | null;
   snapEnabled: boolean; // Whether snap-to-edge is enabled
+  tracks: TrackState[]; // Track states (mute/solo) - index matches track number
 }
 

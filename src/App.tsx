@@ -40,6 +40,10 @@ function ExportButton() {
         <ExportDialog
           clips={timelineState.clips}
           videos={videos}
+          overlayPositions={{
+            track1: timelineState.tracks[1]?.overlayPosition,
+            track2: timelineState.tracks[2]?.overlayPosition,
+          }}
           onClose={handleClose}
           onExportStart={handleExportStart}
         />

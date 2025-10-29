@@ -5,6 +5,8 @@ export const TIMELINE_CONSTANTS = {
   PIXELS_PER_SECOND: 30,
   RULER_HEIGHT: 30,
   TRACK_HEIGHT: 60,
+  TRACK_HEADER_WIDTH: 120, // Width for track headers on left side
+  NUM_TRACKS: 3, // Track 0: Main video, Track 1: Overlay 1, Track 2: Overlay 2
   HANDLE_WIDTH: 14,
   HANDLE_TOLERANCE: 8,
   MIN_CLIP_DURATION: 0.1,
@@ -12,6 +14,7 @@ export const TIMELINE_CONSTANTS = {
   MIN_ZOOM: 0.5,
   MAX_ZOOM: 10,
   SNAP_THRESHOLD: 0.5, // seconds - snap clips within 0.5s of edges
+  TRACK_DRAG_THRESHOLD: 20, // pixels - minimum vertical movement to change tracks
 } as const;
 
 /**
