@@ -491,7 +491,7 @@ fn check_has_audio_stream(file_path: &str) -> bool {
 }
 
 #[tauri::command]
-fn export_video(
+async fn export_video(
     app_handle: tauri::AppHandle,
     clips: Vec<ClipData>,
     #[allow(non_snake_case)] outputPath: String,
@@ -537,6 +537,29 @@ fn export_video(
     // Sort clips by start_time to maintain order
     let mut sorted_clips = clips.clone();
     sorted_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
+    
+    // Clone variables for the blocking task
+    let output_path_clone = outputPath.clone();
+    let app_handle_clone = app_handle.clone();
+    
+    // Run the export in a blocking task to avoid freezing the UI
+    let result = tokio::task::spawn_blocking(move || {
+        export_video_blocking(app_handle_clone, sorted_clips, output_path_clone, width, height, crf, preset)
+    }).await.map_err(|e| format!("Task join error: {}", e))??;
+    
+    Ok(result)
+}
+
+// Blocking export function that does the actual FFmpeg work
+fn export_video_blocking(
+    app_handle: tauri::AppHandle,
+    sorted_clips: Vec<ClipData>,
+    outputPath: String,
+    width: u32,
+    height: u32,
+    crf: String,
+    preset: String,
+) -> Result<String, String> {
     
     // If only one clip, use simple trimming
     if sorted_clips.len() == 1 {
