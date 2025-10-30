@@ -131,34 +131,57 @@ async function loadVideoMetadata(
     video.preload = 'metadata';
     video.src = dataUrl;
 
+    let isResolved = false;
+    let isRejected = false;
+
+    const cleanup = () => {
+      video.src = '';
+      video.load();
+    };
+
     const timeoutId = setTimeout(() => {
-      console.warn('Metadata timeout for:', file.name);
-      reject(new Error('Metadata timeout'));
-    }, 3000);
+      if (!isResolved && !isRejected) {
+        isRejected = true;
+        console.warn('Metadata timeout for:', file.name);
+        cleanup();
+        reject(new Error('Metadata timeout'));
+      }
+    }, 10000); // Increased timeout to 10 seconds for larger files
 
-    video.addEventListener('loadedmetadata', () => {
-      clearTimeout(timeoutId);
-      const newVideo: VideoFile = {
-        id: `${Date.now()}-${index}-${Math.random()}`,
-        path: dataUrl,
-        filename: file.name,
-        duration: video.duration,
-        size: file.size,
-        resolution: {
-          width: video.videoWidth,
-          height: video.videoHeight,
-        },
-      };
-      addVideo(newVideo);
-      console.log('Successfully loaded video via browser:', file.name);
-      resolve();
-    });
+    const onLoadedMetadata = () => {
+      if (!isResolved && !isRejected) {
+        isResolved = true;
+        clearTimeout(timeoutId);
+        const newVideo: VideoFile = {
+          id: `${Date.now()}-${index}-${Math.random()}`,
+          path: dataUrl,
+          filename: file.name,
+          duration: video.duration,
+          size: file.size,
+          resolution: {
+            width: video.videoWidth,
+            height: video.videoHeight,
+          },
+        };
+        addVideo(newVideo);
+        console.log('Successfully loaded video via browser:', file.name);
+        cleanup();
+        resolve();
+      }
+    };
 
-    video.addEventListener('error', (e) => {
-      clearTimeout(timeoutId);
-      console.error('Failed to load video metadata via browser:', file.name, e);
-      reject(new Error('Video load error'));
-    });
+    const onError = (e: Event) => {
+      if (!isResolved && !isRejected) {
+        isRejected = true;
+        clearTimeout(timeoutId);
+        console.error('Failed to load video metadata via browser:', file.name, e);
+        cleanup();
+        reject(new Error('Video load error'));
+      }
+    };
+
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('error', onError);
   });
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import './ImportZone.css';
 
@@ -9,6 +9,7 @@ interface ImportZoneProps {
 
 export function ImportZone({ onFilesSelected, onFilesWithPaths }: ImportZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const justDroppedRef = useRef(false);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -31,14 +32,27 @@ export function ImportZone({ onFilesSelected, onFilesWithPaths }: ImportZoneProp
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    justDroppedRef.current = true;
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       onFilesSelected(files);
     }
+
+    // Reset the flag after a short delay to prevent click from firing
+    setTimeout(() => {
+      justDroppedRef.current = false;
+    }, 300);
   };
 
-  const handleClick = async () => {
+  const handleClick = async (e: React.MouseEvent) => {
+    // Prevent click from firing if we just handled a drop
+    if (justDroppedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     try {
       console.log('Opening Tauri file picker...');
       
