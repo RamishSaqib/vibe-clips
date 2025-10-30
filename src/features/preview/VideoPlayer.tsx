@@ -6,6 +6,7 @@ import { useTimeline } from '../../contexts/TimelineContext';
 import { useVideos } from '../../contexts/VideoContext';
 import { useSubtitles } from '../../contexts/SubtitleContext';
 import { calculateOverlayPosition } from '../../utils/overlayPosition';
+import { filtersToCSSFilter } from '../../utils/filters';
 import type { Subtitle, SubtitleStyle } from '../../types/subtitle';
 import './VideoPlayer.css';
 
@@ -231,27 +232,53 @@ export function VideoPlayer() {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw base video (Track 0)
+    // Draw base video (Track 0) with filters
     if (baseVideo.readyState >= 2) {
+      ctx.save();
+      // Apply filters via canvas filter (CSS filters would not work on canvas drawing)
+      if (baseClip?.clip.filters) {
+        const filterStr = filtersToCSSFilter(baseClip.clip.filters);
+        // Note: Canvas filter property uses CSS filter syntax
+        if (filterStr) {
+          ctx.filter = filterStr;
+        }
+      }
       ctx.drawImage(baseVideo, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
     }
     
-    // Draw overlay 1 (Track 1) - use configured position
+    // Draw overlay 1 (Track 1) - use configured position with filters
     if (overlay1Video && overlay1Clip && overlay1Video.readyState >= 2) {
       const overlayW = canvas.width * 0.3;
       const overlayH = canvas.height * 0.3;
       const position = timelineState.tracks[1]?.overlayPosition || 'bottom-right';
       const { x, y } = calculateOverlayPosition(position, canvas.width, canvas.height, overlayW, overlayH);
+      ctx.save();
+      if (overlay1Clip.clip.filters) {
+        const filterStr = filtersToCSSFilter(overlay1Clip.clip.filters);
+        if (filterStr) {
+          ctx.filter = filterStr;
+        }
+      }
       ctx.drawImage(overlay1Video, x, y, overlayW, overlayH);
+      ctx.restore();
     }
     
-    // Draw overlay 2 (Track 2) - use configured position
+    // Draw overlay 2 (Track 2) - use configured position with filters
     if (overlay2Video && overlay2Clip && overlay2Video.readyState >= 2) {
       const overlayW = canvas.width * 0.3;
       const overlayH = canvas.height * 0.3;
       const position = timelineState.tracks[2]?.overlayPosition || 'bottom-left';
       const { x, y } = calculateOverlayPosition(position, canvas.width, canvas.height, overlayW, overlayH);
+      ctx.save();
+      if (overlay2Clip.clip.filters) {
+        const filterStr = filtersToCSSFilter(overlay2Clip.clip.filters);
+        if (filterStr) {
+          ctx.filter = filterStr;
+        }
+      }
       ctx.drawImage(overlay2Video, x, y, overlayW, overlayH);
+      ctx.restore();
     }
     
     // Draw subtitles

@@ -409,6 +409,13 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
         ctx.font = '9px sans-serif';
         ctx.fillText(formatTime(clip.duration), clipX + 8, clipY + 35);
       }
+
+      // Draw filter indicator icon if filters are applied
+      if (clip.filters && (clip.filters.brightness || clip.filters.contrast || clip.filters.saturation)) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('🎨', clipX + clipWidth - 18, clipY + 15);
+      }
       });
     }
 

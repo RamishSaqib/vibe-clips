@@ -1,4 +1,5 @@
 import type { VideoFile } from './video';
+import type { ClipFilters } from './filters';
 
 export interface TimelineClip {
   id: string;
@@ -7,7 +8,8 @@ export interface TimelineClip {
   duration: number; // Current duration after trimming
   trimStart: number; // Trim in-point in seconds (offset from clip start)
   trimEnd: number; // Trim out-point in seconds (offset from clip start)
-  track: number; // Track number (0 for MVP)
+  track: number; // Track number (0, 1, or 2)
+  filters?: ClipFilters; // Optional filters applied to clip
 }
 
 export type OverlayPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'center';

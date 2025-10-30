@@ -1,0 +1,143 @@
+.filter-panel {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  width: 300px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.filter-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+
+.filter-panel-header h3 {
+  margin: 0;
+  color: #ddd;
+  font-size: 18px;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.close-button:hover {
+  background: #333;
+  color: #ddd;
+}
+
+.filter-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-group label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #ddd;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.filter-value {
+  color: #4a9eff;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+}
+
+.filter-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #333;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.filter-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4a9eff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.filter-slider::-webkit-slider-thumb:hover {
+  background: #6bb5ff;
+}
+
+.filter-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4a9eff;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.filter-slider::-moz-range-thumb:hover {
+  background: #6bb5ff;
+}
+
+.filter-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #666;
+  padding: 0 2px;
+}
+
+.reset-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ddd;
+  cursor: pointer;
+  font-size: 14px;
+  width: 100%;
+  transition: background 0.2s;
+}
+
+.reset-button:hover {
+  background: #444;
+}
+

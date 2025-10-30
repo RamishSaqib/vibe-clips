@@ -82,12 +82,20 @@ fn create_hidden_command(app_handle: Option<&tauri::AppHandle>, program: &str) -
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClipFilters {
+    brightness: Option<i32>,  // -100 to 100
+    contrast: Option<i32>,    // -100 to 100
+    saturation: Option<i32>,  // -100 to 100
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClipData {
     file_path: String,
     trim_start: f64,
     duration: f64,
     start_time: f64,
     track: i32, // Track number: 0 = main video, 1 = overlay 1, 2 = overlay 2
+    filters: Option<ClipFilters>, // Optional filters applied to clip
 }
 
 #[tauri::command]
@@ -725,6 +733,37 @@ async fn transcribe_clip(
     Ok(result)
 }
 
+// Helper function to build FFmpeg eq filter string from ClipFilters
+fn build_eq_filter(filters: &Option<ClipFilters>) -> Option<String> {
+    let filters = filters.as_ref()?;
+    
+    let mut parts = Vec::new();
+    
+    if let Some(brightness) = filters.brightness {
+        // Convert -100 to 100 to brightness value between -1.0 and 1.0
+        let brightness_val = brightness as f64 / 100.0;
+        parts.push(format!("brightness={:.3}", brightness_val));
+    }
+    
+    if let Some(contrast) = filters.contrast {
+        // Convert -100 to 100 to contrast value between 0.0 and 2.0
+        let contrast_val = 1.0 + (contrast as f64 / 100.0);
+        parts.push(format!("contrast={:.3}", contrast_val));
+    }
+    
+    if let Some(saturation) = filters.saturation {
+        // Convert -100 to 100 to saturation value between 0.0 and 2.0
+        let saturation_val = 1.0 + (saturation as f64 / 100.0);
+        parts.push(format!("saturation={:.3}", saturation_val));
+    }
+    
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("eq={}", parts.join(":")))
+    }
+}
+
 // Blocking export function that does the actual FFmpeg work
 fn calculate_overlay_pos(position: &str, base_w: u32, base_h: u32, overlay_w: u32, overlay_h: u32, padding: u32) -> (u32, u32) {
     match position {
@@ -896,10 +935,18 @@ fn export_video_blocking(
             cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
             cmd.arg("-movflags").arg("faststart"); // Web-friendly
             
-            // Build video filter (scale + optional subtitles)
+            // Build video filter (scale + filters + optional subtitles)
             let mut vf_parts = Vec::new();
+            
+            // Add scale filter first
             if width > 0 && height > 0 {
                 vf_parts.push(format!("scale={}:{}", width, height));
+            }
+            
+            // Add eq filter for brightness/contrast/saturation if present
+            if let Some(eq_filter) = build_eq_filter(&clip.filters) {
+                println!("🎨 Applying filters: {}", eq_filter);
+                vf_parts.push(eq_filter);
             }
             
             // Add subtitles if provided - use relative path workaround to avoid Windows colon issues
@@ -1052,9 +1099,20 @@ fn export_video_blocking(
         cmd.arg("-b:a").arg("192k");
         cmd.arg("-pix_fmt").arg("yuv420p");
         
-        // Add resolution scaling if specified
+        // Build video filter (scale + filters)
+        let mut vf_parts = Vec::new();
         if width > 0 && height > 0 {
-            cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+            vf_parts.push(format!("scale={}:{}", width, height));
+        }
+        
+        // Add eq filter for brightness/contrast/saturation if present
+        if let Some(eq_filter) = build_eq_filter(&clip.filters) {
+            println!("🎨 Applying filters to clip {}: {}", i, eq_filter);
+            vf_parts.push(eq_filter);
+        }
+        
+        if !vf_parts.is_empty() {
+            cmd.arg("-vf").arg(vf_parts.join(","));
         }
         
         // Add flags to suppress ALL output
@@ -1094,6 +1152,7 @@ fn export_video_blocking(
     cmd.arg("-i").arg(concat_file.to_str().unwrap());
     
     // Build video filter (re-encode + optional subtitles)
+    // Note: Individual clip filters are already applied when processing each clip
     let mut vf_parts = Vec::new();
     if width > 0 && height > 0 {
         vf_parts.push(format!("scale={}:{}", width, height));
@@ -1265,8 +1324,20 @@ fn export_video_blocking(
             cmd.arg("-b:a").arg("192k");
             cmd.arg("-pix_fmt").arg("yuv420p");
             
+            // Build video filter (scale + filters)
+            let mut vf_parts = Vec::new();
             if width > 0 && height > 0 {
-                cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+                vf_parts.push(format!("scale={}:{}", width, height));
+            }
+            
+            // Add eq filter for brightness/contrast/saturation if present
+            if let Some(eq_filter) = build_eq_filter(&clip.filters) {
+                println!("🎨 Applying filters to Track 0 clip {}: {}", i, eq_filter);
+                vf_parts.push(eq_filter);
+            }
+            
+            if !vf_parts.is_empty() {
+                cmd.arg("-vf").arg(vf_parts.join(","));
             }
             
             cmd.arg("-hide_banner");

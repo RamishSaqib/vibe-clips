@@ -73,6 +73,11 @@ export function ExportDialog({ clips, videos, overlayPositions, subtitleTracks, 
           duration: clip.duration,
           start_time: clip.startTime,
           track: clip.track,
+          filters: clip.filters ? {
+            brightness: clip.filters.brightness,
+            contrast: clip.filters.contrast,
+            saturation: clip.filters.saturation,
+          } : undefined,
         };
       }));
       
@@ -82,6 +87,11 @@ export function ExportDialog({ clips, videos, overlayPositions, subtitleTracks, 
         duration: number;
         start_time: number;
         track: number;
+        filters?: {
+          brightness?: number;
+          contrast?: number;
+          saturation?: number;
+        };
       }>;
 
       console.log('About to call invoke export_video...');

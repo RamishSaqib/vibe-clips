@@ -5,6 +5,7 @@ import { useVideos } from '../../contexts/VideoContext';
 import { useTimeline } from '../../contexts/TimelineContext';
 import { useSubtitles } from '../../contexts/SubtitleContext';
 import { SubtitlePanel } from '../subtitles';
+import { FilterPanel } from '../filters';
 import { formatTime } from '../../utils/format';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { invoke } from '@tauri-apps/api/core';
@@ -19,6 +20,7 @@ export function Timeline() {
   const [clipToDelete, setClipToDelete] = useState<string | null>(null);
   const [showSubtitlePanel, setShowSubtitlePanel] = useState(false);
   const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => {
@@ -122,6 +124,21 @@ export function Timeline() {
       return { ...prev, clips: updatedClips };
     });
   }, [setTimelineState]);
+
+  const handleFilterUpdate = useCallback((filters: import('../../types/filters').ClipFilters | undefined) => {
+    const selectedClipId = timelineState.selectedClipId;
+    if (!selectedClipId) return;
+
+    setTimelineState(prev => {
+      const updatedClips = prev.clips.map(clip => {
+        if (clip.id === selectedClipId) {
+          return { ...clip, filters: filters };
+        }
+        return clip;
+      });
+      return { ...prev, clips: updatedClips };
+    });
+  }, [timelineState.selectedClipId, setTimelineState]);
 
   const handleTrackToggle = useCallback((trackIndex: number, type: 'mute' | 'solo') => {
     setTimelineState(prev => {
@@ -376,6 +393,13 @@ export function Timeline() {
               ✏️ Edit Subtitles
             </button>
           )}
+          <button 
+            onClick={() => setShowFilterPanel(true)}
+            disabled={!timelineState.selectedClipId}
+            title="Apply filters to selected clip"
+          >
+            🎨 Filters
+          </button>
         </div>
       </div>
       
@@ -409,6 +433,14 @@ export function Timeline() {
         onConfirm={confirmDeleteClip}
         onCancel={cancelDeleteClip}
       />
+
+      {showFilterPanel && timelineState.selectedClipId && (
+        <FilterPanel
+          filters={timelineState.clips.find(c => c.id === timelineState.selectedClipId)?.filters}
+          onUpdate={handleFilterUpdate}
+          onClose={() => setShowFilterPanel(false)}
+        />
+      )}
 
       {showSubtitlePanel && timelineState.selectedClipId && getSubtitleTrack(timelineState.selectedClipId) && (
         <div className="subtitle-panel-wrapper">
