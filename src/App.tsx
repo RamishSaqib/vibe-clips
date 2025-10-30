@@ -4,14 +4,17 @@ import { Timeline } from './features/timeline';
 import { VideoPlayer } from './features/preview';
 import { ExportDialog } from './features/export';
 import { RecordingPanel } from './features/recording';
+import { Settings } from './features/settings';
 import { VideoProvider, useVideos } from './contexts/VideoContext';
 import { TimelineProvider, useTimeline } from './contexts/TimelineContext';
 import { RecordingProvider } from './contexts/RecordingContext';
+import { SubtitleProvider, useSubtitles } from './contexts/SubtitleContext';
 import './App.css'
 
 function ExportButton() {
   const { timelineState } = useTimeline();
   const { videos } = useVideos();
+  const { subtitleTracks } = useSubtitles();
   const [showDialog, setShowDialog] = useState(false);
 
   const handleExport = () => {
@@ -44,6 +47,7 @@ function ExportButton() {
             track1: timelineState.tracks[1]?.overlayPosition,
             track2: timelineState.tracks[2]?.overlayPosition,
           }}
+          subtitleTracks={subtitleTracks}
           onClose={handleClose}
           onExportStart={handleExportStart}
         />
@@ -53,15 +57,51 @@ function ExportButton() {
 }
 
 function App() {
+  const [showSettings, setShowSettings] = useState(false);
+
   return (
     <VideoProvider>
     <TimelineProvider>
+    <SubtitleProvider>
     <RecordingProvider>
     <div className="app">
       <header className="app-header">
-        <h1>Welcome to VibeClips</h1>
-        <p>Your desktop video editor</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div>
+            <h1>Welcome to VibeClips</h1>
+            <p>Your desktop video editor</p>
+          </div>
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className="settings-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#333',
+              border: '1px solid #555',
+              borderRadius: '4px',
+              color: '#ddd',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            }}
+          >
+            ⚙️ Settings
+          </button>
+        </div>
       </header>
+
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div className="settings-container" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="close-settings"
+            >
+              ×
+            </button>
+            <Settings />
+          </div>
+        </div>
+      )}
 
       <main className="app-main">
         <div className="placeholder-section import-section">
@@ -87,6 +127,7 @@ function App() {
       </main>
     </div>
     </RecordingProvider>
+    </SubtitleProvider>
     </TimelineProvider>
     </VideoProvider>
   )

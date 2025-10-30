@@ -639,6 +639,102 @@ Major code refactoring to improve maintainability, performance, and code quality
 
 ---
 
+## PR#14: Split Clips at Playhead ✅ COMPLETE
+
+**Branch:** `feature/pr14-split-clips`
+
+### Description
+Add ability to split clips at the current playhead position.
+
+### Acceptance Criteria
+- [x] "Split" button in timeline UI when clip is selected and playhead is over it
+- [x] Keyboard shortcut: `S` key to split
+- [x] Split logic creates two new clips from original
+- [x] First clip ends at playhead position
+- [x] Second clip starts at playhead position
+
+### Technical Implementation
+- Added `splitClipAtPlayhead` function in `TimelineContext`
+- Split button appears when clip is selected
+- Keyboard shortcut `S` triggers split action
+- Clips are split with proper trim point calculations
+- Minimum clip duration validation (0.5s) to prevent tiny clips
+
+### Dependencies
+- PR#5 (Trim functionality)
+
+### Testing
+- Split clip in middle, verify two clips with correct trim points
+- Split near edges, verify minimum duration enforced
+- Keyboard shortcut works
+- Split preserves clip properties (track, video reference)
+
+---
+
+## PR#15: Delete Clips from Timeline ✅ COMPLETE
+
+**Branch:** `feature/pr15-delete-clips`
+
+### Description
+Add ability to delete clips from the timeline with keyboard shortcut and UI button.
+
+### Acceptance Criteria
+- [x] Delete key / Backspace removes selected clip
+- [x] Delete button on selected clip (trash icon)
+- [x] Confirmation dialog for deletion
+- [x] Reposition playhead if it's on deleted clip
+
+### Technical Implementation
+- Added `deleteClip` function in `TimelineContext`
+- Keyboard listener for Delete/Backspace keys
+- Delete button in timeline controls
+- Confirmation dialog using `ConfirmDialog` component
+- Playhead repositioning on deletion
+
+### Dependencies
+- PR#11 (ConfirmDialog component)
+
+### Testing
+- Delete key removes selected clip
+- Clips maintain positions after deletion (no shifting)
+- Playhead repositions correctly
+- Confirmation dialog prevents accidental deletion
+
+---
+
+## PR#16: Snap-to-Edge Functionality ✅ COMPLETE
+
+**Branch:** `feature/pr16-snap-to-edge`
+
+### Description
+Implement snap-to-edge functionality for clips and playhead with visual feedback.
+
+### Acceptance Criteria
+- [x] Snap clips to other clip edges when dragging (within 0.5s tolerance)
+- [x] Snap playhead to clip edges when dragging
+- [x] Visual indicator (dashed line) when snapping
+- [x] Toggle snap on/off with magnet icon button
+
+### Technical Implementation
+- Added `snapEnabled` state to `TimelineState`
+- Implemented `findSnapPoint` helper function with `SNAP_THRESHOLD` (0.5s)
+- Visual snap indicator (dashed vertical line) when snapping
+- Magnet icon button to toggle snap on/off
+- Snap applied to both clip dragging and playhead movement
+
+### Dependencies
+- PR#3 (Timeline view)
+- PR#5 (Trim functionality)
+
+### Testing
+- Clips snap when dragged near edges
+- Visual feedback appears when snapping
+- Toggle turns snap on/off correctly
+- Playhead snaps to clip edges
+- Snap threshold works correctly (0.5s tolerance)
+
+---
+
 ## Success Criteria for MVP
 
 All PRs completed and tested:
@@ -656,6 +752,11 @@ All PRs completed and tested:
 11. ✅ UI improvements & video management *(Completed - PR#11)*
 12. ✅ Production build fixes *(Completed - PR#12)*
 13. ✅ Code refactoring & optimization *(Completed - PR#13)*
+14. ✅ Split clips at playhead *(Completed - PR#14)*
+15. ✅ Delete clips from timeline *(Completed - PR#15)*
+16. ✅ Snap-to-edge functionality *(Completed - PR#16)*
+17. ✅ Multi-track system with overlay positioning *(Completed - PR#17)*
+18. 🚧 AI transcription & subtitles *(In Progress - PR#19)*
 
 ---
 
@@ -668,6 +769,111 @@ All PRs completed and tested:
 5. Create Pull Request with description referencing this PRD
 6. Review and merge to main
 7. Repeat for next PR
+
+---
+
+## PR#17: Full Multi-Track System ✅ COMPLETE
+
+**Branch:** `feature/pr17-multi-track`
+
+### Description
+Implemented a complete multi-track system with three video tracks and configurable overlay positioning. Users can place clips on different tracks, position overlays in 5 different locations, and see a real-time composite preview.
+
+### Acceptance Criteria
+- [x] 3-track system (Main Video, Overlay 1, Overlay 2)
+- [x] Track headers with labels and mute/solo controls
+- [x] Configurable overlay positioning (bottom-left, bottom-right, top-left, top-right, center)
+- [x] Overlay position controls in track headers
+- [x] Real-time composite preview showing overlays
+- [x] Multi-track export with proper overlay composition
+- [x] Vertical scrolling for timeline tracks
+- [x] Horizontal clip dragging to change start time
+- [x] Track-aware clip selection and trimming
+
+### Technical Implementation
+- Updated `TimelineCanvas.tsx` to render 3 separate tracks
+- Added `TrackState` interface with `overlayPosition` property
+- Created `calculateOverlayPosition` utility function
+- Updated Rust export logic to handle multi-track composition
+- Fixed overlay export to pad videos to full timeline duration
+- Implemented canvas-based composite preview in `VideoPlayer.tsx`
+- Added overlay position cycling buttons (BR/BL/TL/TR/C) in track headers
+- Improved track-aware clip detection and trimming
+
+### Files Modified
+- `src/types/timeline.ts` - Added overlay position types
+- `src/contexts/TimelineContext.tsx` - Added overlay position state
+- `src/features/timeline/TimelineCanvas.tsx` - Multi-track rendering
+- `src/features/timeline/Timeline.tsx` - Clip movement handlers
+- `src/features/preview/VideoPlayer.tsx` - Composite preview
+- `src/features/export/ExportDialog.tsx` - Pass overlay positions
+- `src-tauri/src/lib.rs` - Multi-track export logic
+- `src/utils/overlayPosition.ts` - Position calculation utility
+
+### Testing
+- [x] Dragging clips between tracks works
+- [x] Export with overlays renders correctly
+- [x] Overlay positioning changes reflect in preview and export
+- [x] Vertical scrolling works for all tracks
+- [x] Horizontal clip dragging works correctly
+- [x] Track-aware selection and trimming works
+
+---
+
+## PR#19: AI Transcription & Subtitles 🚧 IN PROGRESS
+
+**Branch:** `feature/pr19-ai-transcription`
+
+### Description
+Add AI-powered transcription using OpenAI Whisper API to automatically generate subtitles for video clips, with editing capabilities and optional burn-in during export.
+
+### Acceptance Criteria
+- [ ] "Generate Subtitles" button for selected clip
+- [ ] Extract audio from clip using FFmpeg
+- [ ] Call OpenAI Whisper API with audio file
+- [ ] Parse SRT/VTT format response
+- [ ] Display subtitles as timeline track overlay
+- [ ] Burn-in subtitles to export (optional toggle)
+- [ ] Subtitle styling editor (font, size, color, position)
+- [ ] Settings dialog for OpenAI API key
+- [ ] API cost warnings (~$0.006/minute)
+
+### Technical Implementation
+- Create `src/types/subtitle.ts` with subtitle data structures
+- Create `src-tauri/src/transcription.rs` for Whisper API integration
+- Use reqwest for HTTP requests to OpenAI API
+- Extract audio: `ffmpeg -i video.mp4 -vn audio.mp3`
+- API endpoint: `https://api.openai.com/v1/audio/transcriptions`
+- Parse SRT format into structured subtitle entries
+- Add subtitle track to timeline display
+- Burn-in using FFmpeg: `-vf "subtitles=subtitles.srt"`
+
+### Files to Create
+- `src/types/subtitle.ts` - ✅ Created
+- `src/features/subtitles/SubtitlePanel.tsx`
+- `src/features/subtitles/SubtitleEditor.tsx`
+- `src/features/subtitles/SubtitleTrack.tsx`
+- `src-tauri/src/transcription.rs` - ✅ Created
+
+### Files to Modify
+- `src-tauri/src/lib.rs` - Add transcription commands
+- `src/features/timeline/Timeline.tsx` - Add subtitle track
+- `src/features/export/ExportDialog.tsx` - Add "Burn Subtitles" checkbox
+- `src-tauri/Cargo.toml` - ✅ Added reqwest dependency
+
+### Dependencies
+- OpenAI API key (user-provided)
+- reqwest crate for HTTP requests
+- FFmpeg for audio extraction and subtitle burn-in
+
+### Testing
+- [ ] Transcribe short clip (30s)
+- [ ] Verify SRT format parsing
+- [ ] Edit subtitle text and timing
+- [ ] Export with burned-in subtitles
+- [ ] Subtitle styling works
+- [ ] API key validation
+- [ ] Error handling for API failures
 
 ---
 

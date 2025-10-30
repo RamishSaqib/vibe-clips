@@ -1,0 +1,188 @@
+.settings {
+  padding: 1.5rem;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.settings h2 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ddd;
+}
+
+.setting-group {
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.setting-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #bbb;
+}
+
+.api-key-input-group {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.api-key-input-group input {
+  width: 100%;
+  padding: 0.75rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ddd;
+  font-size: 0.875rem;
+  font-family: monospace;
+  transition: border-color 0.15s ease;
+}
+
+.api-key-input-group input:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.api-key-input-group input.saved {
+  border-color: #2a7a2a;
+}
+
+.api-key-input-group input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saved-indicator {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #2a7a2a;
+  font-size: 0.875rem;
+  pointer-events: none;
+}
+
+.setting-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.setting-actions button {
+  padding: 0.5rem 1.5rem;
+  background: #4a9eff;
+  border: 1px solid #4a9eff;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.setting-actions button:hover:not(:disabled) {
+  background: #5ba9ff;
+}
+
+.setting-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-actions button.delete-button {
+  background: #8b0000;
+  border-color: #a00;
+}
+
+.setting-actions button.delete-button:hover {
+  background: #a00;
+}
+
+.help-text {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #999;
+  line-height: 1.6;
+}
+
+.help-text a {
+  color: #4a9eff;
+  text-decoration: none;
+}
+
+.help-text a:hover {
+  text-decoration: underline;
+}
+
+.cost-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-style: italic;
+}
+
+.delete-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-confirm-dialog {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 400px;
+}
+
+.delete-confirm-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: #ddd;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.confirm-actions button {
+  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.confirm-actions button.delete-button {
+  background: #8b0000;
+  border-color: #a00;
+  color: #fff;
+}
+
+.confirm-actions button.delete-button:hover {
+  background: #a00;
+}
+
+.confirm-actions button:not(.delete-button) {
+  background: #333;
+  border-color: #555;
+  color: #ddd;
+}
+
+.confirm-actions button:not(.delete-button):hover {
+  background: #444;
+}
+

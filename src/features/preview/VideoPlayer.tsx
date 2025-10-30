@@ -4,12 +4,132 @@ import type { VideoFile } from '../../types/video';
 import type { TimelineClip } from '../../types/timeline';
 import { useTimeline } from '../../contexts/TimelineContext';
 import { useVideos } from '../../contexts/VideoContext';
+import { useSubtitles } from '../../contexts/SubtitleContext';
 import { calculateOverlayPosition } from '../../utils/overlayPosition';
+import type { Subtitle, SubtitleStyle } from '../../types/subtitle';
 import './VideoPlayer.css';
+
+// Helper function to draw subtitle on canvas
+function drawSubtitle(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  subtitle: Subtitle,
+  style: SubtitleStyle
+) {
+  const padding = 10;
+  const maxWidth = canvas.width * 0.8;
+  
+  // Set font properties
+  ctx.font = `${style.fontSize}px ${style.fontFamily}`;
+  ctx.textAlign = style.alignment === 'left' ? 'left' : style.alignment === 'right' ? 'right' : 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Calculate text metrics
+  const lines = wrapText(ctx, subtitle.text, maxWidth);
+  const lineHeight = style.fontSize * 1.2;
+  const totalHeight = lines.length * lineHeight + padding * 2;
+  
+  // Calculate position
+  let y: number;
+  switch (style.position) {
+    case 'top':
+      y = padding + totalHeight / 2;
+      break;
+    case 'center':
+      y = canvas.height / 2;
+      break;
+    case 'bottom':
+    default:
+      y = canvas.height - padding - totalHeight / 2;
+      break;
+  }
+  
+  let x: number;
+  switch (style.alignment) {
+    case 'left':
+      x = padding;
+      break;
+    case 'right':
+      x = canvas.width - padding;
+      break;
+    case 'center':
+    default:
+      x = canvas.width / 2;
+      break;
+  }
+  
+  // Draw background if specified
+  if (style.backgroundColor) {
+    // Parse hex color with alpha (e.g., #00000080 -> rgba(0,0,0,0.5))
+    let bgColor = style.backgroundColor;
+    let alpha = 1;
+    
+    // Handle hex colors with alpha channel (8 digits)
+    if (bgColor.length === 9 && bgColor.startsWith('#')) {
+      const alphaHex = bgColor.slice(7, 9);
+      alpha = parseInt(alphaHex, 16) / 255;
+      bgColor = bgColor.slice(0, 7); // Remove alpha hex digits
+    } else if (bgColor.length === 8 && !bgColor.startsWith('#')) {
+      // Handle if someone uses "00000080" format
+      const alphaHex = bgColor.slice(6, 8);
+      alpha = parseInt(alphaHex, 16) / 255;
+      bgColor = '#' + bgColor.slice(0, 6);
+    }
+    
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = bgColor;
+    
+    const bgX = style.alignment === 'left' ? x - padding : 
+                style.alignment === 'right' ? x - maxWidth + padding : 
+                x - maxWidth / 2;
+    const bgY = y - totalHeight / 2;
+    
+    ctx.fillRect(bgX, bgY, maxWidth, totalHeight);
+    ctx.globalAlpha = 1;
+  }
+  
+  // Draw text with outline for readability
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = style.fontSize * 0.1;
+  ctx.fillStyle = style.color;
+  
+  lines.forEach((line, index) => {
+    const lineY = y - (lines.length - 1) * lineHeight / 2 + index * lineHeight;
+    ctx.strokeText(line, x, lineY);
+    ctx.fillText(line, x, lineY);
+  });
+}
+
+// Helper function to wrap text to fit within max width
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = words[0];
+  
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const testLine = currentLine + ' ' + word;
+    const metrics = ctx.measureText(testLine);
+    
+    if (metrics.width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.length > 0 ? lines : [text];
+}
 
 export function VideoPlayer() {
   const { timelineState, setTimelineState } = useTimeline();
   const { videos } = useVideos();
+  const { subtitleTracks } = useSubtitles();
   const baseVideoRef = useRef<HTMLVideoElement>(null);
   const overlay1VideoRef = useRef<HTMLVideoElement>(null);
   const overlay2VideoRef = useRef<HTMLVideoElement>(null);
@@ -134,10 +254,25 @@ export function VideoPlayer() {
       ctx.drawImage(overlay2Video, x, y, overlayW, overlayH);
     }
     
+    // Draw subtitles
+    const playheadTime = timelineState.playheadPosition;
+    subtitleTracks.forEach((track) => {
+      if (!track.enabled) return;
+      
+      // Find active subtitle at current playhead position
+      const activeSubtitle = track.subtitles.find(sub => 
+        playheadTime >= sub.startTime && playheadTime < sub.endTime
+      );
+      
+      if (activeSubtitle) {
+        drawSubtitle(ctx, canvas, activeSubtitle, track.style);
+      }
+    });
+    
     if (isPlaying) {
       animationFrameRef.current = requestAnimationFrame(drawComposite);
     }
-  }, [baseClip, overlay1Clip, overlay2Clip, isPlaying, timelineState.tracks]);
+  }, [baseClip, overlay1Clip, overlay2Clip, isPlaying, timelineState.tracks, timelineState.playheadPosition, subtitleTracks]);
 
   // Update canvas when videos update
   useEffect(() => {

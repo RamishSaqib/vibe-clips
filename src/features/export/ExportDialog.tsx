@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import type { TimelineClip } from '../../types/timeline';
 import type { VideoFile } from '../../types/video';
+import type { SubtitleTrack } from '../../types/subtitle';
 import { formatTime } from '../../utils/format';
 import { EXPORT_PRESETS, QUALITY_PRESETS } from '../../utils/constants';
 import './ExportDialog.css';
@@ -11,16 +12,18 @@ interface ExportDialogProps {
   clips: TimelineClip[];
   videos: VideoFile[];
   overlayPositions?: { track1?: string; track2?: string }; // Overlay positions for tracks 1 and 2
+  subtitleTracks?: Map<string, SubtitleTrack>; // Map of clipId -> SubtitleTrack
   onClose: () => void;
   onExportStart: () => void;
 }
 
-export function ExportDialog({ clips, videos, overlayPositions, onClose, onExportStart }: ExportDialogProps) {
+export function ExportDialog({ clips, videos, overlayPositions, subtitleTracks, onClose, onExportStart }: ExportDialogProps) {
   const [outputPath, setOutputPath] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<'success' | 'error' | null>(null);
   const [resolutionPreset, setResolutionPreset] = useState<keyof typeof EXPORT_PRESETS>('source');
   const [qualityPreset, setQualityPreset] = useState<keyof typeof QUALITY_PRESETS>('balanced');
+  const [burnSubtitles, setBurnSubtitles] = useState(false);
 
   const handleExport = async () => {
     if (!outputPath) {
@@ -91,9 +94,21 @@ export function ExportDialog({ clips, videos, overlayPositions, onClose, onExpor
       const selectedResolution = EXPORT_PRESETS[resolutionPreset];
       const selectedQuality = QUALITY_PRESETS[qualityPreset];
       
+      // Generate SRT file if burning subtitles
+      let srtFilePath: string | null = null;
+      if (burnSubtitles && subtitleTracks && subtitleTracks.size > 0) {
+        console.log('Generating SRT file for subtitle burn-in...');
+        srtFilePath = await generateSRTFile(subtitleTracks, clips);
+        console.log('SRT file generated at:', srtFilePath);
+      } else {
+        console.log('Burn subtitles:', burnSubtitles, 'Subtitle tracks:', subtitleTracks?.size || 0);
+      }
+      
       let result;
       try {
         // Call Tauri command to export with explicit timeout handling
+        console.log('Calling export_video with subtitle_srt_path:', srtFilePath);
+        console.log('SRT file path value:', srtFilePath, 'Type:', typeof srtFilePath, 'Is null:', srtFilePath === null, 'Is undefined:', srtFilePath === undefined);
         result = await Promise.race([
           invoke('export_video', {
             clips: validClipData,
@@ -103,6 +118,7 @@ export function ExportDialog({ clips, videos, overlayPositions, onClose, onExpor
             crf: selectedQuality.crf,
             preset: selectedQuality.preset,
             overlayPositions: overlayPositions || { track1: 'bottom-right', track2: 'bottom-left' },
+            subtitleSrtPath: srtFilePath, // camelCase to match Rust with #[allow(non_snake_case)]
           }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Export timeout after 120 seconds')), 120000)
@@ -125,14 +141,15 @@ export function ExportDialog({ clips, videos, overlayPositions, onClose, onExpor
       console.error('Export error:', error);
       setExportMessage('error');
       setIsExporting(false);
+      
+      // Show alert with error details
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Export error: ${errorMessage}\n\nPlease ensure FFmpeg is installed and try again.`);
     }
   };
 
   const handleBrowse = async () => {
-    console.log('Browse button clicked');
     try {
-      console.log('Calling save dialog...');
-      
       const path = await save({
         title: 'Save Exported Video',
         defaultPath: 'my-video.mp4', // More specific default name
@@ -201,6 +218,20 @@ export function ExportDialog({ clips, videos, overlayPositions, onClose, onExpor
               ))}
             </select>
           </div>
+
+          {subtitleTracks && subtitleTracks.size > 0 && (
+            <div className="export-setting">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={burnSubtitles}
+                  onChange={(e) => setBurnSubtitles(e.target.checked)}
+                  disabled={isExporting}
+                />
+                Burn Subtitles into Video
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="export-path">
@@ -260,3 +291,48 @@ function getTotalDuration(clips: TimelineClip[]): number {
   return Math.max(...clips.map(clip => clip.startTime + clip.duration));
 }
 
+// Generate SRT file from subtitle tracks
+async function generateSRTFile(
+  subtitleTracks: Map<string, SubtitleTrack>,
+  clips: TimelineClip[]
+): Promise<string> {
+  // Collect all subtitles from all tracks, sorted by time
+  const allSubtitles: Array<{ startTime: number; endTime: number; text: string; clipId: string }> = [];
+  
+  subtitleTracks.forEach((track, clipId) => {
+    if (track.enabled) {
+      track.subtitles.forEach(sub => {
+        allSubtitles.push({
+          ...sub,
+          clipId,
+        });
+      });
+    }
+  });
+  
+  // Sort by start time
+  allSubtitles.sort((a, b) => a.startTime - b.startTime);
+  
+  // Generate SRT content
+  let srtContent = '';
+  allSubtitles.forEach((sub, index) => {
+    srtContent += `${index + 1}\n`;
+    srtContent += `${formatSRTTime(sub.startTime)} --> ${formatSRTTime(sub.endTime)}\n`;
+    srtContent += `${sub.text}\n\n`;
+  });
+  
+  // Write to temp file using Rust command (has proper permissions)
+  const srtPath = await invoke<string>('write_srt_file', { srtContent });
+  
+  return srtPath;
+}
+
+// Format time in SRT format: HH:MM:SS,mmm
+function formatSRTTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`;
+}

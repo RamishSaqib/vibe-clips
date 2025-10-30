@@ -1,12 +1,17 @@
-use tauri::{Emitter, Listener, Manager};
+use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
+// transcription module is available via mod transcription above
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
 mod screen_capture;
 mod audio_capture;
+mod transcription;
+
+const KEYRING_SERVICE: &str = "com.vibeclips.app";
+const KEYRING_USERNAME: &str = "openai_api_key";
 
 // Helper function to get bundled FFmpeg path
 fn get_bundled_ffmpeg_path(app_handle: &tauri::AppHandle, program: &str) -> Option<std::path::PathBuf> {
@@ -125,6 +130,33 @@ fn save_temp_video(data_url: String) -> Result<String, String> {
 fn get_temp_dir() -> Result<String, String> {
     let temp = std::env::temp_dir();
     Ok(temp.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn write_srt_file(srt_content: String) -> Result<String, String> {
+    use std::fs;
+    
+    println!("Writing SRT file...");
+    println!("SRT content length: {} bytes", srt_content.len());
+    println!("SRT content preview:\n{}", &srt_content.chars().take(300).collect::<String>());
+    
+    let temp_dir = std::env::temp_dir();
+    let srt_path = temp_dir.join(format!("subtitles_{}.srt", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()));
+    
+    fs::write(&srt_path, &srt_content)
+        .map_err(|e| format!("Failed to write SRT file: {}", e))?;
+    
+    println!("SRT file written to: {:?}", srt_path);
+    
+    // Verify file was written
+    if let Ok(metadata) = fs::metadata(&srt_path) {
+        println!("SRT file size: {} bytes", metadata.len());
+    }
+    
+    Ok(srt_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -507,10 +539,20 @@ async fn export_video(
     crf: String,
     preset: String,
     overlay_positions: Option<OverlayPositions>,
+    #[allow(non_snake_case)] subtitleSrtPath: Option<String>,
 ) -> Result<String, String> {
-    // Write to log FIRST THING to verify function is called - try multiple locations
-    let _ = std::fs::write("C:/export_debug.log", "=== FUNCTION CALLED ===\n");
-    let _ = std::fs::write("./export_debug.log", "=== FUNCTION CALLED ===\n");
+    // Write to log FIRST THING to verify function is called
+    let log_path = std::path::Path::new("src-tauri/export_debug.log");
+    let _ = std::fs::write(log_path, "=== FUNCTION CALLED ===\n");
+    
+    println!("=== EXPORT_VIDEO CALLED ===");
+    println!("Clips: {}", clips.len());
+    println!("Output path: {}", outputPath);
+    println!("Width: {}, Height: {}", width, height);
+    println!("CRF: {}, Preset: {}", crf, preset);
+    println!("Overlay positions: {:?}", overlay_positions);
+    println!("Subtitle SRT path: {:?}", subtitleSrtPath);
+    println!("==========================");
     
     // Log to file to avoid terminal spam
     let mut log = format!("Clips count: {}\nOutput path: {}\n", 
@@ -518,7 +560,8 @@ async fn export_video(
     
     if clips.is_empty() {
         log.push_str("ERROR: No clips\n");
-        let _ = std::fs::write("C:/export_debug.log", &log);
+        let log_path = std::path::Path::new("src-tauri/export_debug.log");
+        let _ = std::fs::write(log_path, &log);
         return Err("No clips to export".to_string());
     }
     
@@ -529,7 +572,8 @@ async fn export_video(
     if !outputPath.ends_with(".mp4") && !outputPath.ends_with(".mov") {
         let error_msg = format!("Output path must end with .mp4 or .mov, got: '{}'", outputPath);
         log.push_str(&format!("ERROR: {}\n", error_msg));
-        let _ = std::fs::write("C:/export_debug.log", &log);
+        let log_path = std::path::Path::new("src-tauri/export_debug.log");
+        let _ = std::fs::write(log_path, &log);
         return Err(error_msg);
     }
     
@@ -540,7 +584,7 @@ async fn export_video(
                  i, clip.file_path, clip.trim_start, clip.duration));
     }
     
-    let _ = std::fs::write("C:/export_debug.log", &log);
+    let _ = std::fs::write("src-tauri/export_debug.log", &log);
     
     // Sort clips by start_time to maintain order
     let mut sorted_clips = clips.clone();
@@ -551,11 +595,132 @@ async fn export_video(
     let app_handle_clone = app_handle.clone();
     
     let overlay_positions_clone = overlay_positions.clone();
+    let subtitle_srt_path_clone = subtitleSrtPath.clone();
     
     // Run the export in a blocking task to avoid freezing the UI
     let result = tokio::task::spawn_blocking(move || {
-        export_video_blocking(app_handle_clone, sorted_clips, output_path_clone, width, height, crf, preset, overlay_positions_clone)
+        export_video_blocking(app_handle_clone, sorted_clips, output_path_clone, width, height, crf, preset, overlay_positions_clone, subtitle_srt_path_clone)
     }).await.map_err(|e| format!("Task join error: {}", e))??;
+    
+    Ok(result)
+}
+
+#[tauri::command]
+fn save_api_key(api_key: String) -> Result<(), String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    entry.set_password(&api_key)
+        .map_err(|e| format!("Failed to save API key: {}", e))?;
+    
+    println!("API key saved securely to system keyring");
+    Ok(())
+}
+
+#[tauri::command]
+fn get_api_key() -> Result<String, String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    entry.get_password()
+        .map_err(|_| "No API key found. Please set your OpenAI API key in Settings.".to_string())
+}
+
+#[tauri::command]
+fn delete_api_key() -> Result<(), String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    entry.delete_password()
+        .map_err(|e| format!("Failed to delete API key: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn transcribe_clip(
+    app_handle: tauri::AppHandle,
+    video_path: String,
+    trim_start: f64,
+    trim_end: f64,
+    api_key: Option<String>, // Optional - will use keyring if not provided
+) -> Result<transcription::TranscriptionResponse, String> {
+    use std::env;
+    use keyring::Entry;
+    
+    // Get API key from parameter, keyring, or fallback to .env (for development)
+    let final_api_key = match api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => {
+            // Try keyring first
+            let entry = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+                .map_err(|e| format!("Failed to access keyring: {}", e))?;
+            
+            match entry.get_password() {
+                Ok(key) => key,
+                Err(_) => {
+                    // Fallback to .env for development
+                    let _ = dotenv::dotenv();
+                    env::var("OPENAI_API_KEY")
+                        .map_err(|_| "OpenAI API key not found. Please set your API key in Settings.".to_string())?
+                }
+            }
+        }
+    };
+    
+    // Create temp directory for audio extraction
+    let temp_dir = env::temp_dir();
+    let audio_path = temp_dir.join(format!("audio_{}.mp3", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()));
+    
+    // Extract the trimmed audio segment from the video
+    let ffmpeg_path = find_ffmpeg_binary(Some(&app_handle), "ffmpeg");
+    let mut cmd = Command::new(&ffmpeg_path);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    
+    let duration = trim_end - trim_start;
+    
+    cmd.arg("-i")
+        .arg(&video_path)
+        .arg("-ss")
+        .arg(&trim_start.to_string())
+        .arg("-t")
+        .arg(&duration.to_string())
+        .arg("-vn") // No video
+        .arg("-acodec")
+        .arg("libmp3lame")
+        .arg("-ar")
+        .arg("16000") // 16kHz sample rate for Whisper
+        .arg("-ac")
+        .arg("1") // Mono
+        .arg("-y") // Overwrite
+        .arg(audio_path.to_str().unwrap());
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
+    
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to extract audio: {}", error_msg));
+    }
+    
+    // Transcribe using Whisper API
+    let result = transcription::transcribe_audio_whisper(
+        audio_path.to_str().unwrap(),
+        &final_api_key,
+    ).await?;
+    
+    // Clean up temp audio file
+    let _ = std::fs::remove_file(&audio_path);
     
     Ok(result)
 }
@@ -572,16 +737,118 @@ fn calculate_overlay_pos(position: &str, base_w: u32, base_h: u32, overlay_w: u3
     }
 }
 
+// Helper function to convert SRT to ASS format for better FFmpeg compatibility
+fn convert_srt_to_ass(srt_path: &str, _app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use std::fs;
+    
+    println!("🎬 Processing subtitles from: {}", srt_path);
+    
+    // Verify source SRT exists
+    if !std::path::Path::new(srt_path).exists() {
+        return Err(format!("Subtitle file not found: {}", srt_path));
+    }
+    
+    // Read SRT content
+    let srt_content = fs::read_to_string(srt_path)
+        .map_err(|e| format!("Failed to read SRT: {}", e))?;
+    
+    println!("SRT content ({} bytes):\n{}", srt_content.len(), 
+        &srt_content.chars().take(300).collect::<String>());
+    
+    // Parse SRT and convert to ASS format
+    let temp_dir = std::env::temp_dir();
+    let ass_file = temp_dir.join("vibesubtitles.ass");
+    
+    println!("Converting SRT to ASS format...");
+    
+    // Simple SRT to ASS conversion
+    let ass_content = convert_srt_to_ass_content(&srt_content);
+    
+    fs::write(&ass_file, ass_content)
+        .map_err(|e| format!("Failed to write ASS file: {}", e))?;
+    
+    println!("✓ Converted to ASS: {:?}", ass_file);
+    
+    Ok(ass_file)
+}
+
+// Convert SRT content to ASS format
+fn convert_srt_to_ass_content(srt_content: &str) -> String {
+    let mut ass = String::from("[Script Info]\n");
+    ass.push_str("Title: VibeClips Subtitles\n");
+    ass.push_str("ScriptType: v4.00+\n\n");
+    ass.push_str("[V4+ Styles]\n");
+    ass.push_str("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n");
+    ass.push_str("Style: Default,Arial,24,&Hffffff,&Hffffff,&H0,&H80000000,0,0,0,0,100,100,0,0,1,2,1,2,10,10,10,1\n\n");
+    ass.push_str("[Events]\n");
+    ass.push_str("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
+    
+    // Parse SRT entries
+    let blocks: Vec<&str> = srt_content.split("\n\n").collect();
+    
+    for block in blocks {
+        let lines: Vec<&str> = block.trim().lines().collect();
+        if lines.len() < 3 {
+            continue;
+        }
+        
+        // Skip subtitle number (first line)
+        if let Some(time_line) = lines.get(1) {
+            // Parse time: "00:00:00,000 --> 00:00:02,799"
+            if let Some((start, end)) = parse_srt_time(time_line) {
+                // Get text (rest of lines)
+                let text = lines[2..].join("\\N");
+                
+                // Escape ASS special characters
+                let text_escaped = text
+                    .replace("\\", "\\\\")
+                    .replace("{", "\\{")
+                    .replace("}", "\\}");
+                
+                ass.push_str(&format!("Dialogue: 0,{},{}Default,,0,0,0,,{}\n", start, end, text_escaped));
+            }
+        }
+    }
+    
+    ass
+}
+
+// Parse SRT time format: "00:00:00,000 --> 00:00:02,799" to ASS format: "0:00:00.00"
+fn parse_srt_time(time_line: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = time_line.split(" --> ").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    
+    let start = srt_to_ass_time(parts[0].trim())?;
+    let end = srt_to_ass_time(parts[1].trim())?;
+    
+    Some((start, end))
+}
+
+// Convert SRT time "00:00:00,000" to ASS time "0:00:00.00"
+fn srt_to_ass_time(srt_time: &str) -> Option<String> {
+    // Replace comma with dot for ASS format
+    let ass_time = srt_time.replace(",", ".");
+    Some(ass_time)
+}
+
 fn export_video_blocking(
     app_handle: tauri::AppHandle,
     sorted_clips: Vec<ClipData>,
-    outputPath: String,
+    #[allow(non_snake_case)] outputPath: String,
     width: u32,
     height: u32,
     crf: String,
     preset: String,
     overlay_positions: Option<OverlayPositions>,
+    #[allow(non_snake_case)] subtitleSrtPath: Option<String>,
 ) -> Result<String, String> {
+    
+    println!("=== EXPORT VIDEO BLOCKING STARTED ===");
+    println!("Clips count: {}", sorted_clips.len());
+    println!("Output path: {}", outputPath);
+    println!("Subtitle SRT path: {:?}", subtitleSrtPath);
     
     // Separate clips by track
     let mut track_0_clips: Vec<&ClipData> = sorted_clips.iter().filter(|c| c.track == 0).collect();
@@ -629,34 +896,125 @@ fn export_video_blocking(
             cmd.arg("-pix_fmt").arg("yuv420p"); // Compatible pixel format
             cmd.arg("-movflags").arg("faststart"); // Web-friendly
             
-            // Add resolution scaling if specified (width > 0)
+            // Build video filter (scale + optional subtitles)
+            let mut vf_parts = Vec::new();
             if width > 0 && height > 0 {
-                cmd.arg("-vf").arg(format!("scale={}:{}", width, height));
+                vf_parts.push(format!("scale={}:{}", width, height));
             }
             
-            // Add flags to suppress ALL output
+            // Add subtitles if provided - use relative path workaround to avoid Windows colon issues
+            if let Some(ref srt_path) = subtitleSrtPath {
+                println!("🎬 Burning subtitles from: {}", srt_path);
+                
+                if !std::path::Path::new(srt_path).exists() {
+                    return Err(format!("Subtitle file not found: {}", srt_path));
+                }
+                
+                // Read SRT content
+                let srt_content = std::fs::read_to_string(srt_path)
+                    .map_err(|e| format!("Failed to read SRT: {}", e))?;
+                
+                println!("SRT content ({} bytes)", srt_content.len());
+                
+                // WORKAROUND: Copy SRT to current directory (no drive letter path issues)
+                let simple_srt = std::path::PathBuf::from("./temp_subtitles.srt");
+                
+                std::fs::copy(srt_path, &simple_srt)
+                    .map_err(|e| format!("Failed to copy SRT: {}", e))?;
+                
+                println!("Copied SRT to: {:?}", simple_srt);
+                
+                // Use relative path - no drive letter issues!
+                let subtitle_filter = "subtitles=./temp_subtitles.srt".to_string();
+                
+                println!("Subtitle filter: {}", subtitle_filter);
+                
+                vf_parts.push(subtitle_filter);
+            }
+            
+            if !vf_parts.is_empty() {
+                let vf_filter = vf_parts.join(",");
+                println!("=== APPLYING VIDEO FILTER ===");
+                println!("Video filter: {}", vf_filter);
+                cmd.arg("-vf").arg(vf_filter);
+            } else {
+                println!("WARNING: No video filters applied (no scale, no subtitles)");
+            }
+            
+            // Add flags - use error level if subtitles are present for debugging
             cmd.arg("-hide_banner");
-            cmd.arg("-loglevel").arg("quiet");
-            cmd.arg("-nostats");
+            if subtitleSrtPath.is_some() {
+                cmd.arg("-loglevel").arg("error"); // Show errors when subtitles are involved
+                cmd.stdout(Stdio::piped());
+                cmd.stderr(Stdio::piped());
+            } else {
+                cmd.arg("-loglevel").arg("quiet");
+                cmd.arg("-nostats");
+                cmd.stdout(Stdio::null());
+                cmd.stderr(Stdio::null());
+            }
             
             cmd.arg(&outputPath);
             
-            // Redirect ALL output to null to prevent spam
-            cmd.stdout(Stdio::null());
-            cmd.stderr(Stdio::null());
+            let output = if subtitleSrtPath.is_some() {
+                cmd.output()
+                    .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?
+            } else {
+                // For non-subtitle exports, use status() for better performance
+                let status = cmd.status()
+                    .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+                return if status.success() {
+                    if std::path::Path::new(&outputPath).exists() {
+                        let _ = std::fs::write("src-tauri/export_debug.log", "=== EXPORT SUCCESS ===\n");
+                        Ok(format!("Video exported successfully to {}", outputPath))
+                    } else {
+                        let _ = std::fs::write("src-tauri/export_debug.log", "=== EXPORT FAILED: File not created ===\n");
+                        Err("FFmpeg completed but output file was not created".to_string())
+                    }
+                } else {
+                    let _ = std::fs::write("src-tauri/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+                    Err(format!("FFmpeg failed with exit code: {:?}", status.code()))
+                };
+            };
             
-            let status = cmd.status()
-                .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+            if !output.status.success() {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                let stdout_msg = String::from_utf8_lossy(&output.stdout);
+                println!("=== FFMPEG SINGLE CLIP ERROR ===");
+                println!("Exit code: {:?}", output.status.code());
+                println!("Stderr: {}", error_msg);
+                println!("Stdout: {}", stdout_msg);
+                let _ = std::fs::write("src-tauri/export_debug.log", &format!("=== FFMPEG SINGLE CLIP ERROR ===\nExit code: {:?}\nStderr: {}\nStdout: {}\n", output.status.code(), error_msg, stdout_msg));
+                return Err(format!("FFmpeg failed: {}", error_msg));
+            }
+            
+            let status = output.status;
+            
+            // Log success even if there might have been warnings
+            if status.success() {
+                println!("=== FFMPEG SINGLE CLIP EXPORT SUCCESS ===");
+                if subtitleSrtPath.is_some() {
+                    let stdout_msg = String::from_utf8_lossy(&output.stdout);
+                    let stderr_msg = String::from_utf8_lossy(&output.stderr);
+                    println!("Stdout: {}", stdout_msg);
+                    println!("Stderr: {}", stderr_msg);
+                }
+            }
             
             // Check if output file was created
             if std::path::Path::new(&outputPath).exists() {
-                let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
+                let log_msg = if subtitleSrtPath.is_some() {
+                    "=== EXPORT SUCCESS (with subtitles) ===\n"
+                } else {
+                    "=== EXPORT SUCCESS ===\n"
+                };
+                let _ = std::fs::write("src-tauri/export_debug.log", log_msg);
                 return Ok(format!("Video exported successfully to {}", outputPath));
             } else if status.success() {
-                let _ = std::fs::write("C:/export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== EXPORT FAILED: File not created despite success code ===\n");
                 return Err("FFmpeg completed but output file was not created".to_string());
             } else {
-                let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+                let _ = std::fs::write("src-tauri/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
                 return Err(format!("FFmpeg failed with exit code: {:?}", status.code()));
             }
         }
@@ -728,27 +1086,122 @@ fn export_video_blocking(
     std::fs::write(&concat_file, concat_content)
         .map_err(|e| format!("Failed to write concat file: {}", e))?;
     
-    // Step 3: Concat all temp files
+    // Step 3: Concat all temp files (with optional subtitles)
     let mut cmd = create_hidden_command(Some(&app_handle), "ffmpeg");
     cmd.arg("-y");
     cmd.arg("-f").arg("concat");
     cmd.arg("-safe").arg("0");
     cmd.arg("-i").arg(concat_file.to_str().unwrap());
-    cmd.arg("-c").arg("copy");
     
-    // Add flags to suppress ALL output
+    // Build video filter (re-encode + optional subtitles)
+    let mut vf_parts = Vec::new();
+    if width > 0 && height > 0 {
+        vf_parts.push(format!("scale={}:{}", width, height));
+    }
+    
+    // Add subtitles if provided - use relative path workaround to avoid Windows colon issues
+    if let Some(ref srt_path) = subtitleSrtPath {
+        println!("🎬 Burning subtitles from: {}", srt_path);
+        
+        if !std::path::Path::new(srt_path).exists() {
+            return Err(format!("Subtitle file not found: {}", srt_path));
+        }
+        
+        // Read SRT content
+        let srt_content = std::fs::read_to_string(srt_path)
+            .map_err(|e| format!("Failed to read SRT: {}", e))?;
+        
+        println!("SRT content ({} bytes)", srt_content.len());
+        
+        // WORKAROUND: Copy SRT to current directory (no drive letter path issues)
+        let simple_srt = std::path::PathBuf::from("./temp_subtitles.srt");
+        
+        std::fs::copy(srt_path, &simple_srt)
+            .map_err(|e| format!("Failed to copy SRT: {}", e))?;
+        
+        println!("Copied SRT to: {:?}", simple_srt);
+        
+        // Use relative path - no drive letter issues!
+        let subtitle_filter = "subtitles=./temp_subtitles.srt".to_string();
+        
+        println!("Subtitle filter: {}", subtitle_filter);
+        
+        vf_parts.push(subtitle_filter);
+    }
+    
+    if !vf_parts.is_empty() {
+        let vf_filter = vf_parts.join(",");
+        println!("Video filter: {}", vf_filter);
+        cmd.arg("-vf").arg(vf_filter);
+        // Re-encode video when applying filters
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(&crf);
+        cmd.arg("-pix_fmt").arg("yuv420p");
+    } else {
+        cmd.arg("-c").arg("copy");
+    }
+    cmd.arg("-c:a").arg("aac");
+    cmd.arg("-b:a").arg("192k");
+    
+    // Add flags - use error level if subtitles are present for debugging
     cmd.arg("-hide_banner");
-    cmd.arg("-loglevel").arg("quiet");
-    cmd.arg("-nostats");
+    if subtitleSrtPath.is_some() {
+        cmd.arg("-loglevel").arg("error");
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+    } else {
+        cmd.arg("-loglevel").arg("quiet");
+        cmd.arg("-nostats");
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+    }
     
     cmd.arg(&outputPath);
     
-    // Suppress all output
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
+    let output = if subtitleSrtPath.is_some() {
+        cmd.output()
+            .map_err(|e| format!("Failed to execute FFmpeg concat: {}", e))?
+    } else {
+        // For non-subtitle exports, use status()
+        let status = cmd.status()
+            .map_err(|e| format!("Failed to execute FFmpeg concat: {}", e))?;
+        if status.success() {
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== EXPORT SUCCESS ===\n");
+            // Cleanup temp files
+            for temp_file in &temp_files {
+                let _ = std::fs::remove_file(temp_file);
+            }
+            let _ = std::fs::remove_file(&concat_file);
+            return Ok(format!("Video exported successfully to {}", outputPath))
+        } else {
+            // Cleanup temp files on failure
+            for temp_file in &temp_files {
+                let _ = std::fs::remove_file(temp_file);
+            }
+            let _ = std::fs::remove_file(&concat_file);
+                let _ = std::fs::write("src-tauri/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+            return Err(format!("Concatenation failed with exit code: {:?}", status.code()))
+        }
+    };
     
-    let status = cmd.status()
-        .map_err(|e| format!("Failed to execute FFmpeg concat: {}", e))?;
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        let stdout_msg = String::from_utf8_lossy(&output.stdout);
+        println!("=== FFMPEG CONCAT ERROR ===");
+        println!("Exit code: {:?}", output.status.code());
+        println!("Stderr: {}", error_msg);
+        println!("Stdout: {}", stdout_msg);
+        let _ = std::fs::write("src-tauri/export_debug.log", &format!("=== FFMPEG CONCAT ERROR ===\nExit code: {:?}\nStderr: {}\nStdout: {}\n", output.status.code(), error_msg, stdout_msg));
+        // Cleanup temp files
+        for temp_file in &temp_files {
+            let _ = std::fs::remove_file(temp_file);
+        }
+        let _ = std::fs::remove_file(&concat_file);
+        return Err(format!("FFmpeg concat failed: {}", error_msg));
+    }
+    
+    let status = output.status;
     
     // Cleanup temp files
     for temp_file in &temp_files {
@@ -756,11 +1209,11 @@ fn export_video_blocking(
     }
     let _ = std::fs::remove_file(&concat_file);
     
-        if status.success() {
-            let _ = std::fs::write("C:/export_debug.log", "=== EXPORT SUCCESS ===\n");
+    if status.success() {
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== EXPORT SUCCESS ===\n");
             Ok(format!("Video exported successfully to {}", outputPath))
         } else {
-            let _ = std::fs::write("C:/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
+                let _ = std::fs::write("src-tauri/export_debug.log", format!("=== EXPORT FAILED: exit code {:?} ===\n", status.code()).as_str());
             Err(format!("Concatenation failed with exit code: {:?}", status.code()))
         }
     } else {
@@ -984,9 +1437,53 @@ fn export_video_blocking(
         
         // TODO: Add Track 2 overlay similarly
         
-        if !filter_parts.is_empty() {
-            let filter_complex = filter_parts.join(";");
-            cmd.arg("-filter_complex").arg(&filter_complex);
+        // Add subtitle burn-in if SRT file provided
+        let mut final_filter_complex = if !filter_parts.is_empty() {
+            filter_parts.join(";")
+        } else {
+            String::new()
+        };
+        
+        if let Some(ref srt_path) = subtitleSrtPath {
+            println!("🎬 Burning subtitles from: {}", srt_path);
+            
+            if !std::path::Path::new(srt_path).exists() {
+                return Err(format!("Subtitle file not found: {}", srt_path));
+            }
+            
+            // Read SRT content
+            let srt_content = std::fs::read_to_string(srt_path)
+                .map_err(|e| format!("Failed to read SRT: {}", e))?;
+            
+            println!("SRT content ({} bytes)", srt_content.len());
+            
+            // WORKAROUND: Copy SRT to current directory (no drive letter path issues)
+            let simple_srt = std::path::PathBuf::from("./temp_subtitles.srt");
+            
+            std::fs::copy(srt_path, &simple_srt)
+                .map_err(|e| format!("Failed to copy SRT: {}", e))?;
+            
+            println!("Copied SRT to: {:?}", simple_srt);
+            
+            // Use relative path - no drive letter issues!
+            let subtitle_filter_str = "subtitles=./temp_subtitles.srt".to_string();
+            
+            println!("Subtitle filter: {}", subtitle_filter_str);
+            
+            if !final_filter_complex.is_empty() {
+                // Add subtitles filter after overlay processing
+                final_filter_complex = format!("{};[vout]{}[vsub]", 
+                    final_filter_complex, subtitle_filter_str);
+                println!("Filter complex with subtitles: {}", final_filter_complex);
+                cmd.arg("-filter_complex").arg(&final_filter_complex);
+                cmd.arg("-map").arg("[vsub]");
+            } else {
+                // No overlays, just subtitles
+                println!("Video filter with subtitles: {}", subtitle_filter_str);
+                cmd.arg("-vf").arg(&subtitle_filter_str);
+            }
+        } else if !final_filter_complex.is_empty() {
+            cmd.arg("-filter_complex").arg(&final_filter_complex);
             cmd.arg("-map").arg("[vout]");
             cmd.arg("-map").arg("0:a?"); // Map audio from base video if present
         }
@@ -1000,13 +1497,69 @@ fn export_video_blocking(
         cmd.arg("-t").arg(&format!("{:.3}", max_duration));
         cmd.arg("-movflags").arg("faststart");
         cmd.arg("-hide_banner");
-        cmd.arg("-loglevel").arg("quiet");
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        // Use error level if subtitles are present for debugging
+        if subtitleSrtPath.is_some() {
+            cmd.arg("-loglevel").arg("error");
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+        } else {
+            cmd.arg("-loglevel").arg("quiet");
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        }
         cmd.arg(&outputPath);
         
-        let status = cmd.status()
-            .map_err(|e| format!("Failed to composite video: {}", e))?;
+        let output = if subtitleSrtPath.is_some() {
+            cmd.output()
+                .map_err(|e| format!("Failed to composite video: {}", e))?
+        } else {
+            // For non-subtitle exports, use status()
+            let status = cmd.status()
+                .map_err(|e| format!("Failed to composite video: {}", e))?;
+            if status.success() {
+                // Cleanup temp files
+                for f in &track_0_temp_files {
+                    let _ = std::fs::remove_file(f);
+                }
+                let _ = std::fs::remove_file(&track0_concat);
+                let _ = std::fs::remove_file(&base_video);
+                if let Some(overlay1) = overlay1_video {
+                    let _ = std::fs::remove_file(overlay1);
+                }
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== MULTI-TRACK EXPORT SUCCESS ===\n");
+                return Ok(format!("Multi-track video exported successfully to {}", outputPath));
+            } else {
+                // Cleanup temp files on failure
+                for f in &track_0_temp_files {
+                    let _ = std::fs::remove_file(f);
+                }
+                let _ = std::fs::remove_file(&track0_concat);
+                let _ = std::fs::remove_file(&base_video);
+                if let Some(overlay1) = overlay1_video {
+                    let _ = std::fs::remove_file(overlay1);
+                }
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== MULTI-TRACK EXPORT FAILED ===\n");
+                return Err("Failed to composite multi-track video".to_string());
+            }
+        };
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            println!("FFmpeg multi-track error output: {}", error_msg);
+            let _ = std::fs::write("src-tauri/export_debug.log", &format!("=== FFMPEG MULTI-TRACK ERROR ===\n{}\n", error_msg));
+            // Cleanup temp files
+            for f in &track_0_temp_files {
+                let _ = std::fs::remove_file(f);
+            }
+            let _ = std::fs::remove_file(&track0_concat);
+            let _ = std::fs::remove_file(&base_video);
+            if let Some(overlay1) = overlay1_video {
+                let _ = std::fs::remove_file(overlay1);
+            }
+            return Err(format!("FFmpeg multi-track failed: {}", error_msg));
+        }
+        
+        let status = output.status;
         
         // Cleanup temp files
         for f in &track_0_temp_files {
@@ -1019,10 +1572,20 @@ fn export_video_blocking(
         }
         
         if status.success() {
-            let _ = std::fs::write("C:/export_debug.log", "=== MULTI-TRACK EXPORT SUCCESS ===\n");
+            // Log success with subtitle info
+            if subtitleSrtPath.is_some() {
+                let stdout_msg = String::from_utf8_lossy(&output.stdout);
+                let stderr_msg = String::from_utf8_lossy(&output.stderr);
+                println!("=== FFMPEG MULTI-TRACK EXPORT SUCCESS (with subtitles) ===");
+                println!("Stdout: {}", stdout_msg);
+                println!("Stderr: {}", stderr_msg);
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== MULTI-TRACK EXPORT SUCCESS (with subtitles) ===\n");
+            } else {
+                let _ = std::fs::write("src-tauri/export_debug.log", "=== MULTI-TRACK EXPORT SUCCESS ===\n");
+            }
             Ok(format!("Multi-track video exported successfully to {}", outputPath))
         } else {
-            let _ = std::fs::write("C:/export_debug.log", "=== MULTI-TRACK EXPORT FAILED ===\n");
+            let _ = std::fs::write("src-tauri/export_debug.log", "=== MULTI-TRACK EXPORT FAILED ===\n");
             Err("Failed to composite multi-track video".to_string())
         }
     }
@@ -1098,6 +1661,9 @@ fn import_video_file(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // Load .env file if it exists (silently ignore errors if file doesn't exist)
+  let _ = dotenv::dotenv();
+  
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
@@ -1118,9 +1684,14 @@ pub fn run() {
         mux_video_audio,
         convert_webm_to_mp4,
         composite_pip_video,
-        import_video_file
+        import_video_file,
+        transcribe_clip,
+        save_api_key,
+        get_api_key,
+        delete_api_key,
+        write_srt_file
     ])
-    .setup(|app| {
+    .setup(|_app| {
       Ok(())
     })
     .run(tauri::generate_context!())

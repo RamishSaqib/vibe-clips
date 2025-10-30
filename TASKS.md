@@ -2,7 +2,7 @@
 
 **Last Updated:** October 28, 2024  
 **MVP Deadline:** Tuesday, October 28th at 10:59 PM CT
-**Progress:** All Core PRs Completed (PR#1-13) ✅
+**Progress:** MVP Complete + Additional Features (PR#1-13, PR#14-17, PR#19 in progress) ✅
 
 ---
 
@@ -349,6 +349,62 @@
 
 ---
 
+## PR#14: Split Clips at Playhead ✅ COMPLETE
+**Branch:** `feature/pr14-split-clips`
+
+- [x] Add "Split" button in timeline UI (visible when clip is selected and playhead is over it)
+- [x] Keyboard shortcut: `S` key to split
+- [x] Implement `splitClipAtPlayhead` function in `TimelineContext`
+- [x] Logic: Find clip at playhead → Create two new clips → Remove original
+- [x] First clip: `trimEnd = playheadPosition - clip.startTime + clip.trimStart`
+- [x] Second clip: `startTime = playheadPosition`, `trimStart = trimEnd of first clip`
+- [x] Minimum clip duration validation (0.5s) to prevent tiny clips
+- [x] Test split clip in middle, verify two clips with correct trim points
+- [x] Test split near edges, verify no tiny clips created
+- [x] Test keyboard shortcut works
+- [x] Commit and push branch
+
+---
+
+## PR#15: Delete Clips from Timeline ✅ COMPLETE
+**Branch:** `feature/pr15-delete-clips`
+
+- [x] Delete key / Backspace to remove selected clip
+- [x] Delete button on selected clip (trash icon)
+- [x] Confirmation dialog for deletion using `ConfirmDialog` component
+- [x] Implement `deleteClip` function in `TimelineContext`
+- [x] Reposition playhead if it's on deleted clip
+- [x] Add keyboard listener in `Timeline.tsx`
+- [x] Test Delete key removes selected clip
+- [x] Test clips after deleted clip don't shift (maintain positions)
+- [x] Test playhead repositions correctly
+- [x] Test confirmation dialog prevents accidental deletion
+- [x] Commit and push branch
+
+---
+
+## PR#16: Snap-to-Edge Functionality ✅ COMPLETE
+**Branch:** `feature/pr16-snap-to-edge`
+
+- [x] Snap clips to other clip edges when dragging (within 0.5s tolerance)
+- [x] Snap playhead to clip edges when dragging
+- [x] Visual indicator (dashed line) when snapping
+- [x] Toggle snap on/off with magnet icon button
+- [x] Add `snapEnabled` state to `TimelineState`
+- [x] Implement `findSnapPoint` helper function
+- [x] Add `SNAP_THRESHOLD = 0.5` constant in `src/utils/constants.ts`
+- [x] Apply snap logic in clip drag handlers
+- [x] Apply snap logic in playhead drag handlers
+- [x] Draw snap indicator (dashed vertical line) when snapping
+- [x] Style snap toggle button in `Timeline.css`
+- [x] Test clips snap when dragged near edges
+- [x] Test visual feedback appears when snapping
+- [x] Test toggle turns snap on/off correctly
+- [x] Test playhead snaps to clip edges
+- [x] Commit and push branch
+
+---
+
 ## Final MVP Verification ✅ COMPLETE
 
 - [x] All 13 PRs completed
@@ -393,6 +449,64 @@
 - ✅ Enhanced Timeline UI (PR#11)
 - ✅ Production Build Hardening (PR#12)
 - ✅ Code Refactoring & Optimization (PR#13)
+- ✅ Split Clips at Playhead (PR#14)
+- ✅ Delete Clips from Timeline (PR#15)
+- ✅ Snap-to-Edge Functionality (PR#16)
+- ✅ Multi-Track System with Overlay Positioning (PR#17)
+
+---
+
+## PR#17: Full Multi-Track System ✅ COMPLETE
+**Branch:** `feature/pr17-multi-track`
+
+- [x] Create 3-track system (Main Video, Overlay 1, Overlay 2)
+- [x] Add track headers with labels on left side
+- [x] Implement track headers with mute/solo buttons
+- [x] Update TimelineCanvas to render 3 separate tracks vertically
+- [x] Implement track-aware clip detection (clips on correct track)
+- [x] Add configurable overlay positioning (5 positions: bottom-left, bottom-right, top-left, top-right, center)
+- [x] Add overlay position controls (BR/BL/TL/TR/C buttons) in track headers
+- [x] Update export logic to handle multi-track overlay composition
+- [x] Fix overlay export to properly pad overlay videos to full timeline duration
+- [x] Update preview to show composite multi-track video with overlays
+- [x] Add vertical scrolling for timeline tracks
+- [x] Implement horizontal clip dragging to change start time
+- [x] Fix playhead dragging to work on all tracks
+- [x] Default positions: Overlay 1 = bottom-right, Overlay 2 = bottom-left
+- [x] Test dragging clips between tracks
+- [x] Test export with overlays renders correctly
+- [x] Test overlay positioning changes reflect in preview and export
+- [x] Commit and push branch
+- [x] Merge to main
+
+---
+
+## PR#19: AI Transcription & Subtitles 🚧 IN PROGRESS
+**Branch:** `feature/pr19-ai-transcription`
+
+- [x] Create subtitle data types (`src/types/subtitle.ts`)
+- [x] Add reqwest dependency to Cargo.toml for HTTP requests
+- [x] Create Rust transcription module (`src-tauri/src/transcription.rs`)
+- [ ] Add transcription module to lib.rs
+- [ ] Implement Tauri command for transcribing audio
+- [ ] Create SubtitlePanel UI component
+- [ ] Create SubtitleEditor component for editing subtitle text/timing
+- [ ] Add "Generate Subtitles" button in timeline for selected clip
+- [ ] Implement audio extraction from video using FFmpeg
+- [ ] Integrate OpenAI Whisper API call
+- [ ] Parse SRT format response from API
+- [ ] Display subtitles as timeline track overlay
+- [ ] Add subtitle styling editor (font, size, color, position)
+- [ ] Add "Burn Subtitles" checkbox to export dialog
+- [ ] Implement subtitle burn-in using FFmpeg subtitles filter
+- [ ] Add settings dialog for OpenAI API key entry
+- [ ] Warn user about API costs (~$0.006/minute)
+- [ ] Test transcription for short clip (30s)
+- [ ] Verify SRT format parsing
+- [ ] Test editing subtitle text and timing
+- [ ] Test export with burned-in subtitles
+- [ ] Test subtitle styling works
+- [ ] Commit and push branch
 
 ---
 

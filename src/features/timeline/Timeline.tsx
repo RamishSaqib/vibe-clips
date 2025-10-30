@@ -3,15 +3,22 @@ import type { TimelineClip } from '../../types/timeline';
 import { TimelineCanvas } from './TimelineCanvas';
 import { useVideos } from '../../contexts/VideoContext';
 import { useTimeline } from '../../contexts/TimelineContext';
+import { useSubtitles } from '../../contexts/SubtitleContext';
+import { SubtitlePanel } from '../subtitles';
 import { formatTime } from '../../utils/format';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { invoke } from '@tauri-apps/api/core';
+import type { SubtitleTrack, Subtitle } from '../../types/subtitle';
 import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
   const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip, setOverlayPosition } = useTimeline();
+  const { getSubtitleTrack, setSubtitleTrack } = useSubtitles();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clipToDelete, setClipToDelete] = useState<string | null>(null);
+  const [showSubtitlePanel, setShowSubtitlePanel] = useState(false);
+  const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
 
   const handlePlayheadDrag = useCallback((position: number) => {
     setTimelineState(prev => {
@@ -200,6 +207,106 @@ export function Timeline() {
     setClipToDelete(null);
   }, []);
 
+  const handleGenerateSubtitles = useCallback(async () => {
+    const selectedClipId = timelineState.selectedClipId;
+    if (!selectedClipId) {
+      alert('Please select a clip first');
+      return;
+    }
+
+    const clip = timelineState.clips.find(c => c.id === selectedClipId);
+    if (!clip) {
+      alert('Clip not found');
+      return;
+    }
+
+    const video = videos.find(v => v.id === clip.videoFileId);
+    if (!video) {
+      alert('Video not found');
+      return;
+    }
+
+    setIsGeneratingSubtitles(true);
+    
+    try {
+      // Handle data URLs - convert to temp file first
+      let videoPath = video.path;
+      if (videoPath.startsWith('data:')) {
+        videoPath = await invoke('save_temp_video', { dataUrl: videoPath });
+      }
+
+      // Calculate the trim points relative to the original video
+      const clipStartInOriginal = clip.trimStart;
+      const clipEndInOriginal = clip.trimEnd;
+
+      console.log('Transcribing clip:', {
+        clipId: selectedClipId,
+        videoPath,
+        trimStart: clipStartInOriginal,
+        trimEnd: clipEndInOriginal,
+      });
+
+      // Call Rust transcription command - API key is optional (will use keyring if not provided)
+      const result = await invoke<{ subtitles: Array<{ id: number; start_time: number; end_time: number; text: string }>; raw_srt: string }>('transcribe_clip', {
+        videoPath,
+        trimStart: clipStartInOriginal,
+        trimEnd: clipEndInOriginal,
+        apiKey: null, // Will use keyring (or .env fallback in development)
+      });
+
+      // Convert Rust subtitle entries to our Subtitle format
+      // Adjust times to be relative to clip start on timeline
+      const clipTimelineStart = clip.startTime;
+      const subtitles: Subtitle[] = result.subtitles.map((entry, index) => ({
+        id: `subtitle-${selectedClipId}-${entry.id || index}`,
+        startTime: clipTimelineStart + entry.start_time,
+        endTime: clipTimelineStart + entry.end_time,
+        text: entry.text,
+      }));
+
+      // Create subtitle track
+      const subtitleTrack: SubtitleTrack = {
+        clipId: selectedClipId,
+        subtitles,
+        style: {
+          fontFamily: 'Arial',
+          fontSize: 24,
+          color: '#FFFFFF',
+          backgroundColor: '#00000080',
+          position: 'bottom',
+          alignment: 'center',
+        },
+        enabled: true,
+      };
+
+      setSubtitleTrack(selectedClipId, subtitleTrack);
+      setShowSubtitlePanel(true);
+      
+      alert(`Successfully generated ${subtitles.length} subtitles!`);
+    } catch (error) {
+      console.error('Transcription error:', error);
+      const errorMsg = String(error);
+      if (errorMsg.includes("OpenAI API key not found") || errorMsg.includes("No API key found")) {
+        alert(`Failed to generate subtitles: ${error}\n\nPlease set your OpenAI API key in Settings (⚙️ button in the header).`);
+      } else {
+        alert(`Failed to generate subtitles: ${error}\n\nMake sure you have a valid OpenAI API key set in Settings and sufficient credits.`);
+      }
+    } finally {
+      setIsGeneratingSubtitles(false);
+    }
+  }, [timelineState, videos, setSubtitleTrack]);
+
+  const handleSubtitleUpdate = useCallback((clipId: string, subtitles: Subtitle[], style: any) => {
+    const currentTrack = getSubtitleTrack(clipId);
+    if (currentTrack) {
+      setSubtitleTrack(clipId, {
+        ...currentTrack,
+        subtitles,
+        style,
+      });
+    }
+  }, [getSubtitleTrack, setSubtitleTrack]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -262,6 +369,21 @@ export function Timeline() {
           >
             🗑️ Delete
           </button>
+          <button 
+            onClick={handleGenerateSubtitles}
+            disabled={!timelineState.selectedClipId || isGeneratingSubtitles}
+            title="Generate subtitles for selected clip (requires OpenAI API key)"
+          >
+            {isGeneratingSubtitles ? '⏳ Generating...' : '📝 Generate Subtitles'}
+          </button>
+          {timelineState.selectedClipId && getSubtitleTrack(timelineState.selectedClipId) && (
+            <button 
+              onClick={() => setShowSubtitlePanel(true)}
+              title="Edit subtitles"
+            >
+              ✏️ Edit Subtitles
+            </button>
+          )}
         </div>
       </div>
       
@@ -295,6 +417,16 @@ export function Timeline() {
         onConfirm={confirmDeleteClip}
         onCancel={cancelDeleteClip}
       />
+
+      {showSubtitlePanel && timelineState.selectedClipId && getSubtitleTrack(timelineState.selectedClipId) && (
+        <div className="subtitle-panel-wrapper">
+          <SubtitlePanel
+            subtitleTrack={getSubtitleTrack(timelineState.selectedClipId)!}
+            onUpdate={(subtitles, style) => handleSubtitleUpdate(timelineState.selectedClipId, subtitles, style)}
+            onClose={() => setShowSubtitlePanel(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
