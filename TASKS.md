@@ -1,8 +1,8 @@
 # VibeClips - MVP Task Checklist
 
-**Last Updated:** October 28, 2024  
+**Last Updated:** January 2025  
 **MVP Deadline:** Tuesday, October 28th at 10:59 PM CT
-**Progress:** MVP Complete + Additional Features (PR#1-13, PR#14-17, PR#19 in progress) ✅
+**Progress:** MVP Complete + Additional Features (PR#1-19 complete) ✅
 
 ---
 
@@ -453,6 +453,11 @@
 - ✅ Delete Clips from Timeline (PR#15)
 - ✅ Snap-to-Edge Functionality (PR#16)
 - ✅ Multi-Track System with Overlay Positioning (PR#17)
+- ✅ AI Transcription & Subtitles (PR#19)
+- 🚧 Vertical Clip Movement Between Tracks (PR#20)
+- 🚧 Filters and Effects (PR#21)
+- 🚧 Transitions Between Clips (PR#22)
+- 🚧 Undo/Redo Functionality (PR#23)
 
 ---
 
@@ -481,31 +486,123 @@
 
 ---
 
-## PR#19: AI Transcription & Subtitles 🚧 IN PROGRESS
-**Branch:** `feature/pr19-ai-transcription`
+## PR#19: AI Transcription & Subtitles ✅ COMPLETE
+**Branch:** `feature/pr19-ai-transcription` (merged to main)
 
 - [x] Create subtitle data types (`src/types/subtitle.ts`)
 - [x] Add reqwest dependency to Cargo.toml for HTTP requests
 - [x] Create Rust transcription module (`src-tauri/src/transcription.rs`)
-- [ ] Add transcription module to lib.rs
-- [ ] Implement Tauri command for transcribing audio
-- [ ] Create SubtitlePanel UI component
-- [ ] Create SubtitleEditor component for editing subtitle text/timing
-- [ ] Add "Generate Subtitles" button in timeline for selected clip
-- [ ] Implement audio extraction from video using FFmpeg
-- [ ] Integrate OpenAI Whisper API call
-- [ ] Parse SRT format response from API
-- [ ] Display subtitles as timeline track overlay
-- [ ] Add subtitle styling editor (font, size, color, position)
-- [ ] Add "Burn Subtitles" checkbox to export dialog
-- [ ] Implement subtitle burn-in using FFmpeg subtitles filter
-- [ ] Add settings dialog for OpenAI API key entry
-- [ ] Warn user about API costs (~$0.006/minute)
-- [ ] Test transcription for short clip (30s)
-- [ ] Verify SRT format parsing
-- [ ] Test editing subtitle text and timing
-- [ ] Test export with burned-in subtitles
-- [ ] Test subtitle styling works
+- [x] Create SubtitleContext for managing subtitle tracks (`src/contexts/SubtitleContext.tsx`)
+- [x] Create SubtitlePanel UI component with styling editor
+- [x] Create SubtitleEditor component for editing subtitle text/timing
+- [x] Implement real-time subtitle preview on canvas with styling (`VideoPlayer.tsx`)
+- [x] Add subtitle styling editor (font, size, color, position, alignment, background) ✅ COMPLETE
+- [x] Fix color picker to show currently selected color with visual swatch
+- [x] Add "Burn Subtitles" checkbox to export dialog ✅ COMPLETE
+- [x] Implement SRT file generation for export ✅ COMPLETE
+- [x] Implement subtitle burn-in using FFmpeg subtitles filter ✅ COMPLETE
+- [x] Fix Windows FFmpeg path issues with relative path workaround (`./temp_subtitles.srt`)
+- [x] Add subtitle burn-in support for single clip, multi-clip, and multi-track exports
+- [x] Add transcription module to lib.rs ✅ COMPLETE
+- [x] Implement Tauri command for transcribing audio ✅ COMPLETE
+- [x] Add "Generate Subtitles" button in timeline for selected clip ✅ COMPLETE
+- [x] Implement audio extraction from video using FFmpeg ✅ COMPLETE
+- [x] Integrate OpenAI Whisper API call ✅ COMPLETE
+- [x] Parse SRT format response from API ✅ COMPLETE
+- [x] Display subtitles as timeline track overlay ✅ COMPLETE
+- [x] Add settings dialog for OpenAI API key entry ✅ COMPLETE
+- [x] Warn user about API costs (~$0.006/minute) ✅ COMPLETE
+- [x] Test transcription for short clip (30s) ✅ COMPLETE
+- [x] Verify SRT format parsing ✅ COMPLETE
+- [x] Test editing subtitle text and timing ✅ COMPLETE
+- [x] Test export with burned-in subtitles ✅ WORKING ON WINDOWS
+- [x] Test subtitle styling works ✅ COMPLETE
+- [x] Commit and push branch ✅ MERGED TO MAIN
+
+---
+
+## PR#20: Vertical Clip Movement Between Tracks 🚧 TODO
+**Branch:** `feature/pr20-vertical-clip-movement`
+
+- [ ] Implement vertical drag detection in TimelineCanvas
+- [ ] Add `moveClipToTrack` function to TimelineContext
+- [ ] Visual feedback showing target track during drag
+- [ ] Maintain clip's horizontal position (startTime) when moving vertically
+- [ ] Update timeline rendering when clip track changes
+- [ ] Test moving clip from Track 1 to Track 2
+- [ ] Test moving clip between all three tracks
+- [ ] Verify clip maintains startTime position after move
+- [ ] Commit and push branch
+
+---
+
+## PR#21: Filters and Effects 🚧 TODO
+**Branch:** `feature/pr21-filters-effects`
+
+- [ ] Create FilterPanel component with brightness, contrast, saturation sliders
+- [ ] Add filter properties to TimelineClip type (brightness, contrast, saturation)
+- [ ] Implement real-time preview using CSS filters on canvas
+- [ ] Add FFmpeg filter application in Rust export function
+- [ ] Update VideoPlayer to show filter effects in preview
+- [ ] Add filter indicator/icon on timeline clips
+- [ ] Implement reset filters functionality
+- [ ] Test brightness adjustment (-100 to 100)
+- [ ] Test contrast adjustment (-100 to 100)
+- [ ] Test saturation adjustment (-100 to 100)
+- [ ] Test exporting with filters applied
+- [ ] Test applying different filters to different clips
+- [ ] Commit and push branch
+
+---
+
+## PR#22: Transitions Between Clips 🚧 TODO
+**Branch:** `feature/pr22-transitions`
+
+- [ ] Create TransitionPanel component
+- [ ] Add transition type enum (none, fade, slide-left, slide-right, crossfade)
+- [ ] Add transition properties to TimelineClip (type, duration)
+- [ ] Implement transition indicator on timeline between clips
+- [ ] Add FFmpeg transition filters:
+  - [ ] Fade transition
+  - [ ] Slide transitions (left, right)
+  - [ ] Crossfade transition
+- [ ] Implement transition preview in VideoPlayer
+- [ ] Add transition duration slider (0.1s to 2.0s)
+- [ ] Test fade transition between clips
+- [ ] Test slide transitions (verify direction)
+- [ ] Test crossfade transition
+- [ ] Test transition duration changes
+- [ ] Test exporting with transitions
+- [ ] Commit and push branch
+
+---
+
+## PR#23: Undo/Redo Functionality 🚧 TODO
+**Branch:** `feature/pr23-undo-redo`
+
+- [ ] Create HistoryManager class
+- [ ] Implement deep cloning for timeline state
+- [ ] Create history state structure
+- [ ] Implement push() to add state to history
+- [ ] Implement undo() functionality
+- [ ] Implement redo() functionality
+- [ ] Add canUndo() and canRedo() checks
+- [ ] Integrate history manager into TimelineContext
+- [ ] Add keyboard shortcuts (Ctrl+Z / Cmd+Z for undo)
+- [ ] Add keyboard shortcuts (Ctrl+Y / Ctrl+Shift+Z for redo)
+- [ ] Limit history size to prevent memory issues (50 actions)
+- [ ] Clear redo history when new action after undo
+- [ ] Support undo/redo for clip movement
+- [ ] Support undo/redo for trimming
+- [ ] Support undo/redo for deletion
+- [ ] Support undo/redo for split
+- [ ] Support undo/redo for track changes
+- [ ] Support undo/redo for filter changes
+- [ ] Test undo after clip movement
+- [ ] Test undo after trimming
+- [ ] Test undo after deletion
+- [ ] Test multiple undo operations
+- [ ] Test redo after undo
 - [ ] Commit and push branch
 
 ---

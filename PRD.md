@@ -756,7 +756,11 @@ All PRs completed and tested:
 15. ✅ Delete clips from timeline *(Completed - PR#15)*
 16. ✅ Snap-to-edge functionality *(Completed - PR#16)*
 17. ✅ Multi-track system with overlay positioning *(Completed - PR#17)*
-18. 🚧 AI transcription & subtitles *(In Progress - PR#19)*
+18. ✅ AI transcription & subtitles *(Completed - PR#19)*
+19. 🚧 Vertical clip movement between tracks *(In Progress - PR#20)*
+20. 🚧 Filters and effects *(In Progress - PR#21)*
+21. 🚧 Transitions between clips *(In Progress - PR#22)*
+22. 🚧 Undo/redo functionality *(In Progress - PR#23)*
 
 ---
 
@@ -820,23 +824,23 @@ Implemented a complete multi-track system with three video tracks and configurab
 
 ---
 
-## PR#19: AI Transcription & Subtitles 🚧 IN PROGRESS
+## PR#19: AI Transcription & Subtitles ✅ COMPLETE
 
-**Branch:** `feature/pr19-ai-transcription`
+**Branch:** `feature/pr19-ai-transcription` (merged to main)
 
 ### Description
 Add AI-powered transcription using OpenAI Whisper API to automatically generate subtitles for video clips, with editing capabilities and optional burn-in during export.
 
 ### Acceptance Criteria
-- [ ] "Generate Subtitles" button for selected clip
-- [ ] Extract audio from clip using FFmpeg
-- [ ] Call OpenAI Whisper API with audio file
-- [ ] Parse SRT/VTT format response
-- [ ] Display subtitles as timeline track overlay
-- [ ] Burn-in subtitles to export (optional toggle)
-- [ ] Subtitle styling editor (font, size, color, position)
-- [ ] Settings dialog for OpenAI API key
-- [ ] API cost warnings (~$0.006/minute)
+- [x] "Generate Subtitles" button for selected clip
+- [x] Extract audio from clip using FFmpeg
+- [x] Call OpenAI Whisper API with audio file
+- [x] Parse SRT/VTT format response
+- [x] Display subtitles as timeline track overlay (Canvas preview implemented)
+- [x] Burn-in subtitles to export (optional toggle) ✅ COMPLETE
+- [x] Subtitle styling editor (font, size, color, position, alignment, background) ✅ COMPLETE
+- [x] Settings dialog for OpenAI API key
+- [x] API cost warnings (~$0.006/minute)
 
 ### Technical Implementation
 - Create `src/types/subtitle.ts` with subtitle data structures
@@ -850,15 +854,15 @@ Add AI-powered transcription using OpenAI Whisper API to automatically generate 
 
 ### Files to Create
 - `src/types/subtitle.ts` - ✅ Created
-- `src/features/subtitles/SubtitlePanel.tsx`
-- `src/features/subtitles/SubtitleEditor.tsx`
-- `src/features/subtitles/SubtitleTrack.tsx`
+- `src/features/subtitles/SubtitlePanel.tsx` - ✅ Created (with styling editor)
+- `src/features/subtitles/SubtitleEditor.tsx` - ✅ Created
+- `src/contexts/SubtitleContext.tsx` - ✅ Created
 - `src-tauri/src/transcription.rs` - ✅ Created
 
-### Files to Modify
-- `src-tauri/src/lib.rs` - Add transcription commands
-- `src/features/timeline/Timeline.tsx` - Add subtitle track
-- `src/features/export/ExportDialog.tsx` - Add "Burn Subtitles" checkbox
+### Files Modified
+- `src-tauri/src/lib.rs` - ✅ Added subtitle burn-in with relative path workaround for Windows FFmpeg compatibility
+- `src/features/preview/VideoPlayer.tsx` - ✅ Added real-time subtitle rendering on canvas with styling
+- `src/features/export/ExportDialog.tsx` - ✅ Added "Burn Subtitles" checkbox and SRT generation
 - `src-tauri/Cargo.toml` - ✅ Added reqwest dependency
 
 ### Dependencies
@@ -867,13 +871,235 @@ Add AI-powered transcription using OpenAI Whisper API to automatically generate 
 - FFmpeg for audio extraction and subtitle burn-in
 
 ### Testing
-- [ ] Transcribe short clip (30s)
-- [ ] Verify SRT format parsing
-- [ ] Edit subtitle text and timing
-- [ ] Export with burned-in subtitles
-- [ ] Subtitle styling works
-- [ ] API key validation
-- [ ] Error handling for API failures
+- [x] Transcribe short clip (30s)
+- [x] Verify SRT format parsing
+- [x] Edit subtitle text and timing
+- [x] Export with burned-in subtitles ✅ TESTED & WORKING
+- [x] Subtitle styling works ✅ COMPLETE (font, size, color, position, alignment, background)
+- [x] API key validation
+- [x] Error handling for API failures
+
+### Completed Features
+- ✅ Subtitle data structures and types
+- ✅ SubtitlePanel with full styling editor (font, size, color, position, alignment, background)
+- ✅ SubtitleContext for managing subtitle tracks
+- ✅ Real-time subtitle preview on canvas with all styling applied
+- ✅ Color picker with visual color swatch
+- ✅ FFmpeg integration for subtitle burn-in (using relative path workaround for Windows)
+- ✅ SRT file generation for export
+- ✅ Export dialog with "Burn Subtitles" checkbox
+- ✅ Multi-track export support with subtitles
+
+---
+
+## PR#20: Vertical Clip Movement Between Tracks 🚧 TODO
+
+**Branch:** `feature/pr20-vertical-clip-movement`
+
+### Description
+Enable users to move clips vertically between tracks by dragging them to different track lanes on the timeline.
+
+### Acceptance Criteria
+- [ ] Drag clips vertically to move between tracks
+- [ ] Visual feedback during drag (highlight target track)
+- [ ] Prevent clips from being dragged to invalid tracks (if any restrictions exist)
+- [ ] Update clip's track property when moved
+- [ ] Maintain clip's horizontal position (startTime) when moving vertically
+- [ ] Update timeline rendering to reflect clip's new track
+
+### Technical Implementation
+- Add drag handler for vertical movement in `TimelineCanvas.tsx`
+- Detect target track when dragging vertically
+- Update clip's `track` property in `TimelineContext`
+- Recalculate clip positions on new track
+- Visual indicator showing which track the clip will land on
+
+### Files to Modify
+- `src/features/timeline/TimelineCanvas.tsx` - Add vertical drag detection
+- `src/contexts/TimelineContext.tsx` - Add `moveClipToTrack` function
+- `src/types/timeline.ts` - Ensure track property is properly typed
+
+### Dependencies
+- PR#17 (Multi-track system)
+
+### Testing
+- [ ] Drag clip from Track 1 to Track 2
+- [ ] Verify clip maintains its startTime position
+- [ ] Verify clip appears in correct track after move
+- [ ] Test moving clips between all three tracks
+- [ ] Verify visual feedback during drag operation
+
+---
+
+## PR#21: Filters and Effects 🚧 TODO
+
+**Branch:** `feature/pr21-filters-effects`
+
+### Description
+Add video filters and effects including brightness, contrast, and saturation adjustments that can be applied to clips and previewed in real-time.
+
+### Acceptance Criteria
+- [ ] Filter panel UI for adjusting brightness, contrast, saturation
+- [ ] Apply filters to individual clips
+- [ ] Real-time preview of filter effects
+- [ ] Filter values range (brightness: -100 to 100, contrast: -100 to 100, saturation: -100 to 100)
+- [ ] Apply filters during export using FFmpeg filters
+- [ ] Reset/remove filters option
+
+### Technical Implementation
+- Create `FilterPanel.tsx` component with sliders for each filter
+- Add filter properties to clip data structure:
+  ```typescript
+  interface ClipFilters {
+    brightness?: number;  // -100 to 100
+    contrast?: number;    // -100 to 100
+    saturation?: number;  // -100 to 100
+  }
+  ```
+- Implement canvas-based filter preview using CSS filters for preview
+- Apply FFmpeg filters during export:
+  - Brightness: `eq=brightness=0.0` (convert -100 to 100 to -1.0 to 1.0)
+  - Contrast: `eq=contrast=1.0`
+  - Saturation: `eq=saturation=1.0`
+- Update `export_video` Rust function to apply filters per clip
+
+### Files to Create
+- `src/features/filters/FilterPanel.tsx`
+- `src/types/filters.ts`
+
+### Files to Modify
+- `src/types/timeline.ts` - Add filter properties to TimelineClip
+- `src/features/preview/VideoPlayer.tsx` - Apply CSS filters for preview
+- `src-tauri/src/lib.rs` - Apply FFmpeg filters during export
+- `src/features/timeline/Timeline.tsx` - Show filter indicator on clips
+
+### Dependencies
+- PR#17 (Multi-track system)
+
+### Testing
+- [ ] Adjust brightness on a clip and see preview update
+- [ ] Adjust contrast and saturation independently
+- [ ] Export video with filters and verify effects in output
+- [ ] Reset filters to default values
+- [ ] Apply different filters to different clips
+
+---
+
+## PR#22: Transitions Between Clips 🚧 TODO
+
+**Branch:** `feature/pr22-transitions`
+
+### Description
+Add transition effects between clips (fade, slide, etc.) that can be applied at clip boundaries.
+
+### Acceptance Criteria
+- [ ] Transition selection UI (fade, slide left, slide right, crossfade)
+- [ ] Apply transitions between adjacent clips
+- [ ] Transition duration configurable (0.1s to 2.0s)
+- [ ] Visual indicator on timeline showing transition zones
+- [ ] Real-time preview of transitions during playback
+- [ ] Apply transitions during export using FFmpeg filters
+
+### Technical Implementation
+- Create `TransitionPanel.tsx` component
+- Add transition properties to clip data:
+  ```typescript
+  interface ClipTransition {
+    type: 'none' | 'fade' | 'slide-left' | 'slide-right' | 'crossfade';
+    duration: number;  // in seconds
+  }
+  ```
+- Store transition on second clip (applied at start of clip)
+- Implement FFmpeg transitions:
+  - Fade: `fade` filter
+  - Slide: `overlay` filter with position animation
+  - Crossfade: `xfade` filter between clips
+- Update export logic to handle transition overlaps
+
+### Files to Create
+- `src/features/transitions/TransitionPanel.tsx`
+- `src/types/transitions.ts`
+
+### Files to Modify
+- `src/types/timeline.ts` - Add transition properties
+- `src/features/timeline/TimelineCanvas.tsx` - Draw transition indicators
+- `src/features/preview/VideoPlayer.tsx` - Preview transitions
+- `src-tauri/src/lib.rs` - Apply transitions in FFmpeg export
+
+### Dependencies
+- PR#17 (Multi-track system)
+
+### Testing
+- [ ] Apply fade transition between two clips
+- [ ] Apply slide transition and verify direction
+- [ ] Test crossfade transition
+- [ ] Adjust transition duration
+- [ ] Export video with transitions and verify output
+- [ ] Preview transitions in real-time
+
+---
+
+## PR#23: Undo/Redo Functionality 🚧 TODO
+
+**Branch:** `feature/pr23-undo-redo`
+
+### Description
+Implement undo/redo system for timeline edits, allowing users to revert and reapply changes.
+
+### Acceptance Criteria
+- [ ] Undo action (Ctrl+Z / Cmd+Z)
+- [ ] Redo action (Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z)
+- [ ] Track history of timeline state changes
+- [ ] Support undo/redo for: clip movement, trimming, deletion, split, track changes, filter changes
+- [ ] Visual feedback showing undo/redo availability
+- [ ] Keyboard shortcuts work globally
+
+### Technical Implementation
+- Create undo/redo history manager:
+  ```typescript
+  interface HistoryState {
+    timelineState: TimelineState;
+    timestamp: number;
+  }
+  
+  class HistoryManager {
+    history: HistoryState[];
+    currentIndex: number;
+    
+    push(state: TimelineState): void;
+    undo(): TimelineState | null;
+    redo(): TimelineState | null;
+    canUndo(): boolean;
+    canRedo(): boolean;
+  }
+  ```
+- Implement deep cloning of timeline state for history
+- Add keyboard event listeners for undo/redo
+- Update `TimelineContext` to use history manager
+- Limit history size (e.g., 50 actions) to prevent memory issues
+- Clear redo history when new action is performed after undo
+
+### Files to Create
+- `src/utils/historyManager.ts`
+- `src/hooks/useHistory.ts`
+
+### Files to Modify
+- `src/contexts/TimelineContext.tsx` - Integrate history manager
+- `src/features/timeline/Timeline.tsx` - Add keyboard shortcuts
+- `src/types/timeline.ts` - Ensure state is serializable
+
+### Dependencies
+- PR#20 (Vertical clip movement)
+- PR#21 (Filters and effects)
+
+### Testing
+- [ ] Move a clip, undo, verify it returns to original position
+- [ ] Trim a clip, undo, verify trim is reverted
+- [ ] Delete a clip, undo, verify clip is restored
+- [ ] Perform multiple actions, undo several times
+- [ ] Redo after undo works correctly
+- [ ] Keyboard shortcuts work in timeline area
+- [ ] History is cleared after reaching limit
 
 ---
 
