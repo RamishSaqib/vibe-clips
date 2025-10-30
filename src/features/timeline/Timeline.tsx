@@ -13,7 +13,7 @@ import './Timeline.css';
 
 export function Timeline() {
   const { videos } = useVideos();
-  const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip, setOverlayPosition } = useTimeline();
+  const { timelineState, setTimelineState, splitClipAtPlayhead, deleteClip, setOverlayPosition, moveClipToTrack } = useTimeline();
   const { getSubtitleTrack, setSubtitleTrack } = useSubtitles();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clipToDelete, setClipToDelete] = useState<string | null>(null);
@@ -108,16 +108,8 @@ export function Timeline() {
   }, [videos, setTimelineState]);
 
   const handleClipTrackChange = useCallback((clipId: string, newTrack: number) => {
-    setTimelineState(prev => {
-      const updatedClips = prev.clips.map(clip => {
-        if (clip.id === clipId) {
-          return { ...clip, track: newTrack };
-        }
-        return clip;
-      });
-      return { ...prev, clips: updatedClips };
-    });
-  }, [setTimelineState]);
+    moveClipToTrack(clipId, newTrack);
+  }, [moveClipToTrack]);
 
   const handleClipMove = useCallback((clipId: string, newStartTime: number) => {
     setTimelineState(prev => {

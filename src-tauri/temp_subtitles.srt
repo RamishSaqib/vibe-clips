@@ -1,0 +1,84 @@
+1
+00:00:00,000 --> 00:00:02,799
+So they've got us building a messaging app,
+
+2
+00:00:02,799 --> 00:00:04,099
+think iMessage, WhatsApp,
+
+3
+00:00:04,099 --> 00:00:06,019
+whatever one you want to think of.
+
+4
+00:00:06,019 --> 00:00:07,419
+You would think with so many of them
+
+5
+00:00:07,419 --> 00:00:10,060
+that this would be easy to do.
+
+6
+00:00:10,060 --> 00:00:12,019
+It is most definitely not easy to do.
+
+7
+00:00:12,859 --> 00:00:15,560
+Game plan, a lot of planning,
+
+8
+00:00:15,560 --> 00:00:18,940
+a lot of working with the, with cursor
+
+9
+00:00:18,940 --> 00:00:21,879
+and just trying to figure out what to do next for things.
+
+10
+00:00:23,379 --> 00:00:25,500
+It's going not great.
+
+11
+00:00:25,500 --> 00:00:27,859
+Well, well, it's going all right.
+
+12
+00:00:27,859 --> 00:00:32,719
+It's just, it's really making me stressed out a little
+
+13
+00:00:32,719 --> 00:00:35,479
+with so many bugs and things to deal with.
+
+14
+00:00:35,479 --> 00:00:37,039
+When testing with the Android emulators,
+
+15
+00:00:37,039 --> 00:00:38,759
+since I don't have an Android physical device,
+
+16
+00:00:38,759 --> 00:00:41,719
+so that's most of the challenge I feel like.
+
+17
+00:00:43,719 --> 00:00:45,439
+What have I learned?
+
+18
+00:00:45,439 --> 00:00:48,520
+I've learned once again, why I don't want to do mobile dev,
+
+19
+00:00:48,520 --> 00:00:50,639
+why I never wanted to get into this.
+
+20
+00:00:50,639 --> 00:00:52,598
+I don't even really want to touch my own phone anymore.
+
+21
+00:00:52,598 --> 00:00:53,520
+This is hurting me.
+

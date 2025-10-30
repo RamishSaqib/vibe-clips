@@ -48,7 +48,9 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
   const [hoveredHandle, setHoveredHandle] = useState<{ clipId: string; handle: 'left' | 'right' } | null>(null);
   const [snapIndicator, setSnapIndicator] = useState<number | null>(null); // Position in seconds where snap is occurring
   const draggingClipRef = useRef<{ clipId: string; initialTrack: number } | null>(null);
-  const movingClipRef = useRef<{ clipId: string; initialStartTime: number; clickOffset: number } | null>(null);
+  const movingClipRef = useRef<{ clipId: string; initialStartTime: number; clickOffset: number; initialTrack: number } | null>(null);
+  const [highlightedTrack, setHighlightedTrack] = useState<number | null>(null); // Track being targeted for vertical move
+  const isVerticalDragRef = useRef<boolean>(false); // Whether we're in vertical drag mode
   
   // Helper function to get track number from Y coordinate
   const getTrackFromY = useCallback((y: number): number | null => {
@@ -175,13 +177,17 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       const trackY = RULER_HEIGHT + (trackIndex * TRACK_HEIGHT);
       const trackState = state.tracks[trackIndex] || { muted: false, solo: false };
       
-      // Track background (darker if muted)
-      ctx.fillStyle = trackState.muted ? '#1a1a1a' : '#252525';
+      // Track background (darker if muted, highlighted if target for vertical move)
+      if (highlightedTrack === trackIndex) {
+        ctx.fillStyle = '#3a5a7a'; // Highlight color for target track
+      } else {
+        ctx.fillStyle = trackState.muted ? '#1a1a1a' : '#252525';
+      }
       ctx.fillRect(TRACK_HEADER_WIDTH, trackY, width - TRACK_HEADER_WIDTH, TRACK_HEIGHT);
       
-      // Track border
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 1;
+      // Track border (thicker if highlighted)
+      ctx.strokeStyle = highlightedTrack === trackIndex ? '#4a9eff' : '#333';
+      ctx.lineWidth = highlightedTrack === trackIndex ? 2 : 1;
       ctx.strokeRect(TRACK_HEADER_WIDTH, trackY, width - TRACK_HEADER_WIDTH, TRACK_HEIGHT);
     }
 
@@ -445,7 +451,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       ctx.stroke();
       ctx.setLineDash([]); // Reset to solid line
     }
-  }, [state, videos, hoveredHandle, maxDuration, canvasWidth, snapIndicator]);
+  }, [state, videos, hoveredHandle, maxDuration, canvasWidth, snapIndicator, highlightedTrack]);
 
   // Handle mouse move for hover effects - use useCallback to prevent recreation
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -690,25 +696,57 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     // If clicked on a clip body (not handle), prepare for potential drag
     // But only start dragging after movement threshold is met
     // clickedClip is already filtered to the correct track, so we can use it directly
-    if (clickedClip && !clickedHandle && onClipMove) {
+    if (clickedClip && !clickedHandle && (onClipMove || onClipTrackChange)) {
       const clickOffset = clickTime - clickedClip.startTime;
       movingClipRef.current = {
         clipId: clickedClip.id,
         initialStartTime: clickedClip.startTime,
         clickOffset: clickOffset,
+        initialTrack: clickedClip.track,
       };
+      isVerticalDragRef.current = false;
+      setHighlightedTrack(null);
       
       const handleMove = (moveEvent: MouseEvent) => {
         if (!canvas || !container || !movingClipRef.current) return;
         
         // Check if movement threshold is met before starting drag
         if (mouseDownPosRef.current) {
-          const dx = Math.abs(moveEvent.clientX - mouseDownPosRef.current.x);
-          const dy = Math.abs(moveEvent.clientY - mouseDownPosRef.current.y);
+          const dx = moveEvent.clientX - mouseDownPosRef.current.x;
+          const dy = moveEvent.clientY - mouseDownPosRef.current.y;
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
           
-          // Only start dragging if moved more than threshold (prefer horizontal movement for clip dragging)
-          // Allow some vertical movement to account for imperfect mouse control
-          if (dx > DRAG_THRESHOLD || (dx > 2 && dy < 5)) {
+          // Determine if this is vertical or horizontal drag
+          // Vertical drag takes precedence if vertical movement exceeds threshold
+          const VERTICAL_DRAG_THRESHOLD = 15; // Pixels of vertical movement to trigger track change
+          
+          if (!didMoveRef.current && absDy > VERTICAL_DRAG_THRESHOLD && absDy > absDx) {
+            // Vertical drag mode: moving between tracks
+            isVerticalDragRef.current = true;
+            didMoveRef.current = true;
+          }
+          
+          if (isVerticalDragRef.current) {
+            // Vertical drag: change track, maintain horizontal position
+            const containerRect = container.getBoundingClientRect();
+            const mouseYRelativeToContainer = moveEvent.clientY - containerRect.top;
+            const newTrack = getTrackFromY(mouseYRelativeToContainer);
+            
+            if (newTrack !== null && newTrack !== movingClipRef.current.initialTrack) {
+              // Highlight the target track
+              setHighlightedTrack(newTrack);
+              
+              // Update clip's track immediately (maintains horizontal position automatically since startTime doesn't change)
+              if (onClipTrackChange) {
+                onClipTrackChange(movingClipRef.current.clipId, newTrack);
+                movingClipRef.current.initialTrack = newTrack; // Update ref to new track
+              }
+            } else if (newTrack === null) {
+              setHighlightedTrack(null);
+            }
+          } else if (absDx > DRAG_THRESHOLD || (absDx > 2 && absDy < 5)) {
+            // Horizontal drag: move clip along timeline
             didMoveRef.current = true;
             
             const containerRect = container.getBoundingClientRect();
@@ -747,6 +785,10 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
       };
       
       const handleUp = () => {
+        // Clear visual feedback
+        setHighlightedTrack(null);
+        isVerticalDragRef.current = false;
+        
         // Only clear if we didn't actually drag
         if (!didMoveRef.current && movingClipRef.current) {
           // Just a click, selection already happened above
@@ -816,7 +858,7 @@ export function TimelineCanvas({ state, videos, onPlayheadDrag, onVideoDropped, 
     
     document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
-  }, [state.clips, videos, onClipTrim, onPlayheadDrag, onClipSelect, state.zoom, state.snapEnabled, maxDuration, findSnapPoint]);
+  }, [state.clips, videos, onClipTrim, onPlayheadDrag, onClipSelect, onClipMove, onClipTrackChange, state.zoom, state.snapEnabled, maxDuration, findSnapPoint, getTrackFromY]);
 
   // Handle drag and drop - use useCallback
   const handleDragOver = useCallback((e: React.DragEvent) => {

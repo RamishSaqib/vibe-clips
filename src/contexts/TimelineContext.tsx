@@ -8,6 +8,7 @@ interface TimelineContextType {
   splitClipAtPlayhead: (clipId: string, playheadPosition: number) => void;
   deleteClip: (clipId: string) => void;
   setOverlayPosition: (trackIndex: number, position: OverlayPosition) => void;
+  moveClipToTrack: (clipId: string, newTrack: number) => void;
 }
 
 const TimelineContext = createContext<TimelineContextType | undefined>(undefined);
@@ -177,8 +178,32 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const moveClipToTrack = (clipId: string, newTrack: number) => {
+    setTimelineState(prev => {
+      // Validate track number (0, 1, or 2)
+      if (newTrack < 0 || newTrack >= prev.tracks.length) return prev;
+      
+      // Find the clip
+      const clip = prev.clips.find(c => c.id === clipId);
+      if (!clip) return prev;
+      
+      // If already on this track, no change needed
+      if (clip.track === newTrack) return prev;
+      
+      // Update the clip's track property while maintaining all other properties
+      const updatedClips = prev.clips.map(c => {
+        if (c.id === clipId) {
+          return { ...c, track: newTrack };
+        }
+        return c;
+      });
+      
+      return { ...prev, clips: updatedClips };
+    });
+  };
+
   return (
-    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead, deleteClip, setOverlayPosition }}>
+    <TimelineContext.Provider value={{ timelineState, setTimelineState, removeClipsByVideoId, splitClipAtPlayhead, deleteClip, setOverlayPosition, moveClipToTrack }}>
       {children}
     </TimelineContext.Provider>
   );
